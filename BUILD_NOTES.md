@@ -58,6 +58,14 @@ Rules for the build are in the skill
   `config/app_password.txt`). Login cookie fixed: Secure only over HTTPS, otherwise phones on plain-HTTP
   Wi-Fi lost the session.
 
+- Render deployment prepared (7-Nov): `render.yaml` (free plan, Singapore, ALLOW_REFRESH=0, APP_PASSWORD set in
+  Render, APP_SECRET generated); server reads DATA_DIR; the cloud copy gets data only by upload, which
+  `run_daily.cmd` / `run_weekly.cmd` now do after each refresh via `jobs/push_snapshot.py` (reads
+  `config/cloud_url.txt` and `config/app_password.txt`, both git-ignored; skips if no URL). Back-test is embedded
+  in the snapshot. Cloud mode simulated locally and passed. Git repo created, first commit 16cc4f5 (main).
+  Waiting on the user: GitHub private repo + push, Render Blueprint deploy, then the URL for config/cloud_url.txt.
+  Free plan caveat: sleeps when idle and loses its files on restart -> empty until the next upload.
+
 ## Monetisation (asked 7-Nov: 14-day trial plan) - NOT started
 **Decision (Dinesh, 7-Nov-2026): stay personal for now; keep logging ratings to build the live track record,
 revisit monetisation later.** The log only grows on days `jobs/refresh.py` runs (daily scheduling not set up).
