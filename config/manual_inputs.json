@@ -1,0 +1,8 @@
+{
+  "_note": "Figures that are not on Yahoo Finance. Update by hand; the app shows how old each one is.",
+  "gsec_10y": {"value": 7.17, "unit": "% yield", "as_of": "2026-11-06", "source": "Trading Economics"},
+  "repo_rate": {"value": null, "unit": "%", "as_of": null, "source": "RBI (fill in)"},
+  "fii_net_cr": {"value": null, "unit": "Rs crore, cash market, latest session", "as_of": null, "source": "NSE/NSDL daily report (fill in)"},
+  "dii_net_cr": {"value": null, "unit": "Rs crore, cash market, latest session", "as_of": null, "source": "NSE daily report (fill in)"},
+  "fii_net_month_cr": {"value": null, "unit": "Rs crore, month to date", "as_of": null, "source": "NSDL (fill in)"}
+}

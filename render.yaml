@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: stock-advisory
+    runtime: python
+    plan: free
+    region: singapore
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn server.app:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.8
+      - key: APP_PASSWORD
+        sync: false
+      - key: APP_SECRET
+        generateValue: true
+      - key: ALLOW_REFRESH
+        value: "0"
+    # Free plan: the service sleeps when idle and its files are wiped on restart, so data is gone until the next
+    # upload from the PC. For data that survives, switch to a paid plan and uncomment the disk below
+    # (then set DATA_DIR to the mount path).
+    # disk:
+    #   name: data
+    #   mountPath: /var/data
+    #   sizeGB: 1

@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0B1026">
+<title>Stock Advisory</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="icon" href="icons/favicon-32.png" sizes="32x32" type="image/png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Advisory">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand">Stock Advisory <span class="muted" id="asof"></span></div>
+  <button class="icon-btn" id="refreshBtn" title="Refresh data">&#8635;</button>
+</header>
+
+<main id="view" class="view"></main>
+
+<nav class="tabs">
+  <button data-tab="market" class="active">Market</button>
+  <button data-tab="stocks">Stocks</button>
+  <button data-tab="watch">Watch</button>
+  <button data-tab="macro">Macro</button>
+</nav>
+
+<div id="login" class="login hidden">
+  <form id="loginForm">
+    <h2>Stock Advisory</h2>
+    <p class="muted">Personal use. Enter the app password.</p>
+    <input type="password" id="pw" placeholder="Password" autocomplete="current-password">
+    <button type="submit">Open</button>
+    <p id="loginErr" class="err"></p>
+  </form>
+</div>
+
+<script src="model.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

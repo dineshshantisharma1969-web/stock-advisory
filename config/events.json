@@ -1,0 +1,10 @@
+[
+  {"date": "2026-10-29", "title": "West Asia conflict keeping commodity and energy costs high", "risk": "high",
+   "sectors_hit": ["autos", "paints", "cement", "aviation", "FMCG margins"], "sectors_helped": ["oil producers", "defence"],
+   "note": "Maruti cited adverse commodity prices linked to the West Asia conflict and currency moves for its Q2 FY27 profit fall.",
+   "source": "Company Q2 FY27 commentary as reported by Upstox / IANS, read 6-Nov-2026"},
+  {"date": "2026-04-01", "title": "Budget 2026 raised STT on futures and options", "risk": "medium",
+   "sectors_hit": ["exchanges", "brokers", "F&O traders"], "sectors_helped": [],
+   "note": "Futures 0.05%, options premium 0.15%, exercise 0.15% from 1-Apr-2026 (secondary sources; verify).",
+   "source": "Budget 2026 coverage, read 6-Nov-2026"}
+]

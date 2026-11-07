@@ -1,0 +1,26 @@
+{
+  "_note": "Inputs for the automated valuation. Dated market inputs must be refreshed; the rest are stated judgment defaults from the india-equity-advisory skill.",
+  "gsec_10y": 0.0717,
+  "gsec_as_of": "2026-11-06",
+  "sovereign_default_spread": 0.0187,
+  "erp_india": 0.0708,
+  "erp_as_of": "Damodaran, January 2026",
+  "pairing": "A: risk-free = G-Sec minus default spread, with Damodaran's total India ERP",
+  "tax_rate": 0.2517,
+  "terminal_growth": {"bear": 0.04, "base": 0.05, "bull": 0.0525},
+  "bank_growth": 0.05,
+  "exit_multiple_cap": [6, 20],
+  "beta_clip": [0.5, 1.8],
+  "weights": {
+    "default": {"dcf": 0.5, "ev_ebitda": 0.3, "pe": 0.2},
+    "cyclical": {"dcf": 0.3, "ev_ebitda": 0.5, "pe": 0.2},
+    "lender": {"pb_roe": 0.7, "pe": 0.3},
+    "capital_markets": {"pe": 1.0}
+  },
+  "cyclical_sectors": ["Basic Materials", "Energy"],
+  "required_margin": {"high_quality_large_cap": 0.15, "default": 0.25, "cyclical_or_weak": 0.35},
+  "large_cap_rs_crore": 100000,
+  "quality_gate": {"piotroski_min": 5, "altman_min": 1.81, "net_debt_to_ebitda_max": 3.0},
+  "severe": {"piotroski_max": 2, "altman_below": 1.81},
+  "scenario_weights": {"bear": 0.25, "base": 0.5, "bull": 0.25}
+}
