@@ -17,7 +17,7 @@ import numpy as np
 import pandas as pd
 import yfinance as yf
 
-from engine import breadth, indicators, macro, valuation
+from engine import breadth, fno, indicators, macro, valuation
 
 INDICES = {"^NSEI": "NIFTY 50", "^CRSLDX": "NIFTY 500", "^NSEBANK": "BANK NIFTY"}
 
@@ -179,6 +179,12 @@ def main():
     if logged:
         print(f"ratings log: appended {logged} rows for {px.index[-1].date()}")
 
+    try:
+        fno_block = fno.build(px, mpx["Close"]["^INDIAVIX"], px.index[-1])
+    except Exception as e:  # the F&O view must never stop the daily refresh
+        fno_block = {"error": f"{type(e).__name__}: {e}"}
+        print("F&O view failed:", fno_block["error"])
+
     br = breadth.compute(px["Close"][kept], px["Volume"][kept], n500["Close"])
     mc = macro.compute(mpx["Close"])
 
@@ -193,6 +199,7 @@ def main():
         stocks=sorted(stocks, key=lambda s: s["symbol"]),
         valuations=vals,
         backtest=json.loads(Path("data/backtest.json").read_text(encoding="utf-8")) if Path("data/backtest.json").exists() else None,
+        fno=fno_block,
         track_record=track_record({s["symbol"]: s["close"] for s in stocks}, n500["Close"], px.index[-1]),
         valuation_info=dict(note=fund_note, counts=counts, params=valuation.P,
                             method="Automated defaults from each company's statements and industry peers (rules in "

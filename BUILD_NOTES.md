@@ -69,6 +69,12 @@ Rules for the build are in the skill
   `git push`. Render redeploys automatically on each push.
   Free plan caveat: sleeps when idle and loses its files on restart -> empty until the next upload.
 
+- F&O tab (7-Nov): `engine/fno.py` + `config/fno_params.json` (capital Rs 10 lakh default, 1% risk, lots NIFTY 65 /
+  BANK NIFTY 30, holidays, Tuesday expiries) -> snapshot "fno" -> `/api/fno` -> F&O tab. Index rules back-tested
+  (`engine/index_rules.py`, `jobs/backtest_index.py`, re-run each Saturday): F1, F2, F3 all rejected, so the call is
+  NO TRADE with watch-only signals. Option premiums are model values (no NSE option chain on Yahoo); live chain,
+  OI and PCR need the user's broker API.
+
 ## Monetisation (asked 7-Nov: 14-day trial plan) - NOT started
 **Decision (Dinesh, 7-Nov-2026): stay personal for now; keep logging ratings to build the live track record,
 revisit monetisation later.** The log only grows on days `jobs/refresh.py` runs (daily scheduling not set up).

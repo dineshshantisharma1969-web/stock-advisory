@@ -111,6 +111,14 @@ def stock(symbol: str):
             "valuation": (s.get("valuations") or {}).get(sym), "valuation_method": vi.get("method"), "valuation_note": vi.get("note")}
 
 
+@app.get("/api/fno")
+def fno_view():
+    s = _load()
+    if not s or not s.get("fno"):
+        raise HTTPException(503, "no F&O view yet: run jobs/refresh.py")
+    return s["fno"]
+
+
 @app.get("/api/backtest")
 def backtest():
     p = DATA_DIR / "backtest.json"

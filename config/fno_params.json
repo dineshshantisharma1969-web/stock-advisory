@@ -1,0 +1,14 @@
+{
+  "_note": "F&O settings. Lot sizes, expiry days and holidays change: check NSE circulars and your broker's contract list and update the dates below.",
+  "capital_rs": 1000000,
+  "risk_per_trade_pct": 1.0,
+  "max_risk_per_structure_pct": 2.0,
+  "rates": {"r": 0.065, "q": 0.012, "_note": "financing rate and dividend yield used for futures fair value and option models (assumed)"},
+  "indices": {
+    "NIFTY 50": {"symbol": "^NSEI", "lot": 65, "lot_as_of": "2026-01 (secondary sources; confirm in the NSE contract file)", "strike_step": 50, "spread_width": 300, "weekly": true},
+    "BANK NIFTY": {"symbol": "^NSEBANK", "lot": 30, "lot_as_of": "2026-01 (secondary sources; confirm in the NSE contract file)", "strike_step": 100, "spread_width": 700, "weekly": false}
+  },
+  "expiry_weekday": "Tuesday",
+  "holidays": ["2026-11-10", "2026-11-24", "2026-12-25"],
+  "holidays_note": "NSE trading holidays found for Nov-2026 (Diwali Balipratipada, Guru Nanak Jayanti) plus Christmas; add the 2027 list when NSE publishes it. An expiry falling on a holiday moves to the previous trading day."
+}

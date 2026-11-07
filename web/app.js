@@ -299,6 +299,60 @@ function setupSliders(v, price) {
   update();
 }
 
+/* ---------- F&O tab ---------- */
+let FNO = null, fnoIndex = "NIFTY 50";
+async function renderFno() {
+  if (!FNO) {
+    view.innerHTML = '<div class="small">Loading F&amp;O view…</div>';
+    try { FNO = await api("/api/fno"); } catch (e) { if (e.message !== "login") view.innerHTML = `<div class="card">F&amp;O view not available: ${esc(e.message)}</div>`; return; }
+  }
+  const F = FNO, v = F.volatility, i = F.indices[fnoIndex], fut = i.futures;
+  const callCls = i.call.action.startsWith("BUY") ? "up" : i.call.action.startsWith("SELL") ? "down" : "warn";
+  const watch = Object.entries(i.signals);
+  const ruleName = Object.fromEntries((F.rules || []).map((r) => [r.rule, r]));
+  const hint = { low: ["bullish", "bearish"], high: ["bullish", "bearish", "neutral"], middle: ["bullish", "bearish", "neutral"] }[v.regime];
+  view.innerHTML = `
+    <div class="sortbar">${Object.keys(F.indices).map((n) => `<button data-ix="${n}" class="${n === fnoIndex ? "active" : ""}">${n}</button>`).join("")}</div>
+    <div class="card"><h3>Trade call · ${esc(fnoIndex)}</h3>
+      <div style="font-size:24px;font-weight:700" class="${callCls}">${esc(i.call.action)}</div>
+      <div style="font-size:14px">${esc(i.call.reason)}.</div>
+      ${i.call.stop ? `<div class="grid" style="margin-top:8px"><div class="kpi"><div class="l">Reference entry</div><div class="v">${fmt(i.call.ref_price, 0)}</div></div>
+        <div class="kpi"><div class="l">Stop</div><div class="v down">${fmt(i.call.stop, 0)}</div></div><div class="kpi"><div class="l">Lots at your risk limit</div><div class="v">${i.call.lots}</div></div></div>` : ""}
+      ${watch.length ? `<div style="margin-top:10px"><b>Watch only</b> <span class="small">(rules that failed their back-test, shown for information)</span>
+        ${watch.map(([r, s]) => `<div class="row"><span>${r} ${esc(ruleName[r] ? ruleName[r].label : "")}: <b class="${s.side === "BUY" ? "up" : "down"}">${s.side}</b></span>
+          <span style="text-align:right">ref ${fmt(s.ref_price, 0)} · stop ${fmt(s.stop, 0)}<br><span class="small">${s.lots ? s.lots + " lot(s) at 1% risk" : "0 lots: risk per lot exceeds 1% of capital"}</span></span></div>`).join("")}</div>` : '<div class="small" style="margin-top:8px">No rule is signalling on the latest close.</div>'}
+    </div>
+    <div class="card"><h3>${esc(fnoIndex)} · ${i.call.action === "NO TRADE" ? "context" : "market"}</h3>
+      <div class="grid">
+        <div class="kpi"><div class="l">Close</div><div class="v">${fmt(i.close, 0)}</div><div class="s ${cls(i.chg)}">${pct(i.chg, 2)} · regime ${i.regime}</div></div>
+        <div class="kpi"><div class="l">RSI (14)</div><div class="v">${i.rsi}</div><div class="s">${pct(i.vs_200dma)} vs 200-DMA</div></div>
+        <div class="kpi"><div class="l">ATR (14)</div><div class="v">${fmt(i.atr, 0)}</div><div class="s">${i.atr_pct}% of price · 20d vol ${i.realised_vol_20d}%</div></div>
+        <div class="kpi"><div class="l">Expected move to ${i.options_expiry}</div><div class="v">±${fmt(i.expected_move, 0)}</div><div class="s">1 SD range ${fmt(i.range_1sd[0], 0)} – ${fmt(i.range_1sd[1], 0)}</div></div></div>
+      ${lineChart([{ v: i.series.close, c: "var(--accent)" }, { v: i.series.sma50, c: "var(--warn)", w: 1 }, { v: i.series.sma200, c: "var(--muted)", w: 1, dash: "4 4" }])}
+      <div class="small">blue close · amber 50-DMA · grey 200-DMA · expiries: ${i.expiries.weekly ? "weekly " + i.expiries.weekly + " · " : ""}monthly ${i.expiries.monthly} · next ${i.expiries.next_monthly}</div></div>
+    <div class="card"><h3>Volatility</h3>
+      <div class="grid"><div class="kpi"><div class="l">India VIX</div><div class="v">${v.india_vix}</div><div class="s">52w ${v.low_52w} – ${v.high_52w}</div></div>
+        <div class="kpi"><div class="l">IV rank / percentile</div><div class="v">${v.rank}% / ${v.percentile}%</div><div class="s">${v.regime}</div></div></div>
+      <div class="small" style="margin-top:6px">${esc(v.strategy_hint)}. Volatility used for ${esc(fnoIndex)}: ${i.iv_used}% (${esc(i.iv_note)}).</div></div>
+    <div class="card"><h3>Futures (${fut.expiry} expiry)</h3>
+      ${[["Fair value", fmt(fut.fair_value, 1) + ` (basis +${fmt(fut.basis, 1)})`], ["Lot size", `${fut.lot} <span class="small">(${esc(fut.lot_as_of)})</span>`], ["Contract value per lot", "₹" + fmt(fut.notional_rs, 0)],
+         ["Stop of 2 x ATR", fmt(fut.stop_points_2atr, 0) + " points = ₹" + fmt(fut.risk_per_lot_rs, 0) + " per lot"], [`Lots at ${F.risk_per_trade_pct}% risk of ₹${fmt(F.capital_rs, 0)}`, fut.lots_at_risk_limit],
+         ["Capital needed for 1 lot at that risk", "₹" + fmt(fut.capital_for_one_lot_rs, 0)]].map(([k, x]) => `<div class="row"><span class="muted">${k}</span><span style="text-align:right">${x}</span></div>`).join("")}
+      ${fut.lots_at_risk_limit === 0 ? '<div class="small warn" style="margin-top:6px">One futures lot risks more than your per-trade limit: use defined-risk option spreads instead, or accept a larger risk knowingly.</div>' : ""}</div>
+    <div class="card"><h3>Option structures by view (${i.options_expiry}, ${i.dte} days)</h3>
+      <div class="small" style="margin-bottom:6px">${esc(F.model_note)}</div>
+      ${i.structures.map((s) => `<div class="event"><div class="t">${esc(s.name)} <span class="badge ${s.view === "bullish" ? "up" : s.view === "bearish" ? "down" : ""}">${s.view}</span>${hint.includes(s.view) && ((v.regime === "low" && s.net_type === "debit") || (v.regime === "high" && s.net_type === "credit") || v.regime === "middle") ? ' <span class="badge">fits volatility</span>' : ""}</div>
+        <div class="d">${s.legs.map((l) => `${l.action} ${fmt(l.strike, 0)} ${l.type} @ ${l.premium}`).join(" · ")}</div>
+        <div class="small">Net ${s.net_type} ₹${fmt(s.net_rs, 0)} per lot · max profit ₹${fmt(s.max_profit_rs, 0)} · max loss ₹${fmt(s.max_loss_rs, 0)} · breakeven ${s.breakevens.map((b) => fmt(b, 0)).join(" / ")} · lots within ${2}% limit: ${s.lots_within_limit}</div></div>`).join("")}
+      <div class="small" style="margin-top:6px">These are templates for a view you already hold, not a recommendation of the view.</div></div>
+    <div class="card"><h3>Index rules: back-test ${F.backtest_split ? "(judged from " + F.backtest_split + ")" : ""}</h3>
+      <table class="vt"><tr><th>Rule</th><th>Trades</th><th>Win</th><th>PF</th><th>Per trade</th><th>Verdict</th></tr>
+      ${(F.rules || []).map((r) => `<tr><td>${r.rule} ${esc(r.label)}</td><td>${r.oos ? r.oos.trades : "–"}</td><td>${r.oos ? r.oos.win + "%" : "–"}</td><td>${r.oos ? r.oos.pf : "–"}</td><td>${r.oos ? (r.oos.exp > 0 ? "+" : "") + r.oos.exp + "R" : "–"}</td><td class="${r.passed ? "up" : "down"}">${r.passed ? "passed" : "rejected"}</td></tr>`).join("")}</table>
+      <div class="small" style="margin-top:6px">NIFTY 50 and BANK NIFTY since 2007, after costs and futures carry. A rule needs 40+ trades, +0.20R per trade, t-stat above 2, profit factor 1.3+, drawdown within 20% and a profit at double costs before it may issue BUY / SELL calls.</div></div>
+    <div class="limits warn">${esc(F.risk_note)} ${esc(MARKET ? MARKET.limits : "")}</div>`;
+  view.querySelectorAll("[data-ix]").forEach((b) => b.addEventListener("click", () => { fnoIndex = b.dataset.ix; renderFno(); }));
+}
+
 function limits() { return `<div class="limits">${esc(MARKET ? MARKET.limits : "")}</div>`; }
 
 /* ---------- shell ---------- */
@@ -310,7 +364,7 @@ async function load() {
 function render() {
   document.querySelectorAll(".tabs button").forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
   if (!MARKET) { view.innerHTML = '<div class="card">No data yet. Run jobs/refresh.py, then reload.</div>'; return; }
-  ({ market: renderMarket, stocks: renderStocks, watch: renderWatch, macro: renderMacro })[tab]();
+  ({ market: renderMarket, stocks: renderStocks, watch: renderWatch, fno: renderFno, macro: renderMacro })[tab]();
   window.scrollTo(0, 0);
 }
 document.querySelectorAll(".tabs button").forEach((b) => b.addEventListener("click", () => { tab = b.dataset.tab; render(); }));
