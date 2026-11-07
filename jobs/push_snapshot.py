@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def read(name):
     p = ROOT / "config" / name
-    return p.read_text(encoding="utf-8").strip() if p.exists() else ""
+    return p.read_text(encoding="utf-8-sig").strip() if p.exists() else ""  # utf-8-sig: ignore Notepad's byte-order mark
 
 
 url = (sys.argv[1] if len(sys.argv) > 1 else read("cloud_url.txt")).rstrip("/")

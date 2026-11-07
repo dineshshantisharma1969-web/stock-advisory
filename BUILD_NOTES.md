@@ -63,7 +63,10 @@ Rules for the build are in the skill
   `run_daily.cmd` / `run_weekly.cmd` now do after each refresh via `jobs/push_snapshot.py` (reads
   `config/cloud_url.txt` and `config/app_password.txt`, both git-ignored; skips if no URL). Back-test is embedded
   in the snapshot. Cloud mode simulated locally and passed. Git repo created, first commit 16cc4f5 (main).
-  Waiting on the user: GitHub private repo + push, Render Blueprint deploy, then the URL for config/cloud_url.txt.
+  LIVE (7-Nov): https://stock-advisory-7sqm.onrender.com (Render free plan, service srv-dbna0rrrjlhs738680j0,
+  blueprint from private GitHub repo dineshshantisharma1969-web/stock-advisory, branch main). First upload from
+  the PC succeeded (486 stocks). Pushing to GitHub is refused for Claude by the permission system: the user runs
+  `git push`. Render redeploys automatically on each push.
   Free plan caveat: sleeps when idle and loses its files on restart -> empty until the next upload.
 
 ## Monetisation (asked 7-Nov: 14-day trial plan) - NOT started
