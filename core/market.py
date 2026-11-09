@@ -78,6 +78,12 @@ def fetch_fii_dii_today() -> pd.DataFrame:
 
 
 def load_fii_dii_history() -> pd.DataFrame:
+    from . import cloud
+    c = cloud.client()
+    if c:
+        df = pd.DataFrame(c.select("fii_dii", {"order": "date.asc"}), columns=["date", "category", "buy", "sell", "net"])
+        df["date"] = pd.to_datetime(df["date"])
+        return df
     if not config.FII_DII_CSV.exists():
         return pd.DataFrame(columns=["date", "category", "buy", "sell", "net"])
     df = pd.read_csv(config.FII_DII_CSV, parse_dates=["date"])
@@ -85,6 +91,13 @@ def load_fii_dii_history() -> pd.DataFrame:
 
 
 def merge_fii_dii(new: pd.DataFrame, save: bool = True) -> pd.DataFrame:
+    from . import cloud
+    c = cloud.client()
+    if c and save and len(new):
+        rows = new.assign(date=pd.to_datetime(new["date"]).dt.strftime("%Y-%m-%d"))[
+            ["date", "category", "buy", "sell", "net"]].to_dict("records")
+        c.insert("fii_dii", rows, upsert_on="date,category")
+        return load_fii_dii_history()
     hist = pd.concat([load_fii_dii_history(), new], ignore_index=True)
     hist["date"] = pd.to_datetime(hist["date"])
     hist = hist.drop_duplicates(["date", "category"], keep="last").sort_values(["date", "category"])

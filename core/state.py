@@ -128,7 +128,9 @@ def sidebar() -> bool:
         demo = st.toggle("Demo data (offline)", value=st.session_state.get("demo", os.environ.get("DESK_DEMO") == "1"),
                          key="demo",
                          help="Synthetic data for trying the app without internet. Never real prices.")
-        _, saved = data.load_cache("prices_live")
+        from . import cloud
+        st.caption("Storage: ☁️ Supabase (persistent)" if cloud.client() else "Storage: 💻 this computer only")
+        saved = data.cache_saved_at("prices_live")
         st.caption(f"Live prices cached: {saved:%d %b %Y %H:%M}" if saved else "No live data downloaded yet")
         if not demo and is_admin() and st.button("Refresh live data", use_container_width=True):
             refresh_live()
@@ -161,7 +163,7 @@ def load_universe() -> pd.DataFrame:
     return data.load_universe()
 
 
-@st.cache_data(show_spinner="Loading prices...")
+@st.cache_data(show_spinner="Loading prices...", ttl=1800)
 def load_prices(demo: bool) -> dict:
     if demo:
         return data.DemoProvider().prices(list(load_universe()["symbol"]))
@@ -169,7 +171,7 @@ def load_prices(demo: bool) -> dict:
     return px or {}
 
 
-@st.cache_data(show_spinner="Loading fundamentals...")
+@st.cache_data(show_spinner="Loading fundamentals...", ttl=1800)
 def load_fundamentals(demo: bool) -> dict:
     if demo:
         return data.DemoProvider().all_fundamentals(list(load_universe()["symbol"]))
@@ -177,12 +179,12 @@ def load_fundamentals(demo: bool) -> dict:
     return fu or {}
 
 
-@st.cache_data(show_spinner="Scoring Nifty 500...")
+@st.cache_data(show_spinner="Scoring Nifty 500...", ttl=1800)
 def load_screen(demo: bool) -> pd.DataFrame:
     return valuation.screen(load_fundamentals(demo), load_universe())
 
 
-@st.cache_data(show_spinner="Computing market breadth...")
+@st.cache_data(show_spinner="Computing market breadth...", ttl=1800)
 def load_breadth(demo: bool) -> pd.DataFrame:
     px = load_prices(demo)
     return market.breadth(px) if px else pd.DataFrame()

@@ -57,8 +57,8 @@ def main(argv=None) -> int:
         hist = market.merge_fii_dii(today)
         log.info("FII/DII saved for %s (history %d days)", today["date"].max().date(), hist["date"].nunique())
     except Exception as e:
-        log.error("FII/DII fetch failed: %s", e)
-        failed.append("fii_dii")
+        # NSE often blocks cloud servers; not fatal - upload the figures on the FII/DII page instead.
+        log.warning("FII/DII fetch failed (NSE may block this server): %s", e)
 
     _, saved = data.load_cache("fund_live")
     stale = saved is None or datetime.now() - saved > timedelta(days=a.max_fund_age_days)

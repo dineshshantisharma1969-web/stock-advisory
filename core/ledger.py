@@ -18,7 +18,7 @@ from datetime import datetime, timezone
 import numpy as np
 import pandas as pd
 
-from . import config
+from . import cloud, config
 
 GENESIS = "0" * 64
 IDEA_FIELDS = ["created_utc", "kind", "symbol", "setup", "side", "entry", "stop", "target",
@@ -45,11 +45,34 @@ def _digest(rec: dict, prev: str) -> str:
     return hashlib.sha256((prev + payload).encode()).hexdigest()
 
 
-def publish_idea(rec: dict, path=None) -> int:
+def _cloud(path):
+    """Use Supabase unless a local path is given explicitly (tests) or Supabase is not configured."""
+    return None if path is not None else cloud.client()
+
+
+def _normalise(rec: dict) -> dict:
     rec = {k: rec.get(k) for k in IDEA_FIELDS}
     rec["created_utc"] = rec["created_utc"] or datetime.now(timezone.utc).isoformat(timespec="seconds")
     for k in ("entry", "stop", "target"):
         rec[k] = round(float(rec[k]), 2) if rec[k] is not None else None
+    for k in ("lot_size", "horizon_days"):
+        rec[k] = int(rec[k]) if rec[k] is not None and not pd.isna(rec[k]) else None
+    return rec
+
+
+def publish_idea(rec: dict, path=None) -> int:
+    rec = _normalise(rec)
+    c = _cloud(path)
+    if c:
+        for attempt in range(3):  # prev_hash is UNIQUE in the database, so a race fails instead of forking
+            last = c.select("ideas", {"select": "hash", "order": "id.desc", "limit": 1})
+            prev = last[0]["hash"] if last else GENESIS
+            try:
+                row = c.insert("ideas", [{**rec, "prev_hash": prev, "hash": _digest(rec, prev)}])
+                return int(row[0]["id"])
+            except cloud.SupabaseError as e:
+                if e.status != 409 or attempt == 2:
+                    raise
     with _conn(path) as c:
         row = c.execute("SELECT hash FROM ideas ORDER BY id DESC LIMIT 1").fetchone()
         prev = row[0] if row else GENESIS
@@ -59,7 +82,13 @@ def publish_idea(rec: dict, path=None) -> int:
         return cur.lastrowid
 
 
+IDEA_COLS = ["id"] + IDEA_FIELDS + ["prev_hash", "hash"]
+
+
 def ideas(path=None) -> pd.DataFrame:
+    c = _cloud(path)
+    if c:
+        return pd.DataFrame(c.select("ideas", {"order": "id.asc"}), columns=IDEA_COLS)
     with _conn(path) as c:
         return pd.read_sql("SELECT * FROM ideas ORDER BY id", c)
 
@@ -68,10 +97,9 @@ def verify_chain(path=None) -> tuple[bool, str]:
     df = ideas(path)
     prev = GENESIS
     for _, r in df.iterrows():
-        rec = r.to_dict()
-        rec["lot_size"] = None if pd.isna(rec["lot_size"]) else int(rec["lot_size"])
-        rec["horizon_days"] = None if pd.isna(rec["horizon_days"]) else int(rec["horizon_days"])
-        if r["prev_hash"] != prev or _digest(rec, prev) != r["hash"]:
+        # normalise exactly as at publish time (databases may return 100.0 as 100, ints as floats, NaN for NULL)
+        rec = {k: (None if not isinstance(v, str) and pd.isna(v) else v) for k, v in r.to_dict().items()}
+        if r["prev_hash"] != prev or _digest(_normalise(rec), prev) != r["hash"]:
             return False, f"Chain broken at idea #{r['id']}"
         prev = r["hash"]
     return True, f"{len(df)} ideas verified, chain intact"
@@ -119,9 +147,15 @@ def evaluate_ideas(df: pd.DataFrame, prices: dict) -> pd.DataFrame:
 
 
 # ------------------------------------------------------------------ manual journal
+TRADE_COLS = ["segment", "symbol", "side", "qty", "entry_date", "entry", "exit_date", "exit", "charges",
+              "idea_id", "notes"]
+
+
 def add_trade(t: dict, path=None) -> int:
-    cols = ["segment", "symbol", "side", "qty", "entry_date", "entry", "exit_date", "exit", "charges",
-            "idea_id", "notes"]
+    cols = TRADE_COLS
+    c = _cloud(path)
+    if c:
+        return int(c.insert("trades", [{k: t.get(k) for k in cols}])[0]["id"])
     with _conn(path) as c:
         cur = c.execute(f"INSERT INTO trades ({','.join(cols)}) VALUES ({','.join('?' * len(cols))})",
                         [t.get(k) for k in cols])
@@ -129,6 +163,13 @@ def add_trade(t: dict, path=None) -> int:
 
 
 def close_trade(trade_id: int, exit_date: str, exit_px: float, charges: float | None = None, path=None):
+    c = _cloud(path)
+    if c:
+        vals = {"exit_date": exit_date, "exit": exit_px}
+        if charges is not None:
+            vals["charges"] = charges
+        c.update("trades", {"id": int(trade_id)}, vals)
+        return
     with _conn(path) as c:
         if charges is None:
             c.execute("UPDATE trades SET exit_date=?, exit=? WHERE id=?", (exit_date, exit_px, trade_id))
@@ -138,8 +179,13 @@ def close_trade(trade_id: int, exit_date: str, exit_px: float, charges: float | 
 
 
 def trades(prices: dict | None = None, path=None) -> pd.DataFrame:
-    with _conn(path) as c:
-        df = pd.read_sql("SELECT * FROM trades ORDER BY id", c)
+    c = _cloud(path)
+    if c:
+        df = pd.DataFrame(c.select("trades", {"order": "id.asc"}), columns=["id"] + TRADE_COLS)
+        df = df.astype({k: float for k in ("qty", "entry", "exit", "charges")})
+    else:
+        with _conn(path) as c:
+            df = pd.read_sql("SELECT * FROM trades ORDER BY id", c)
     if df.empty:
         return df
     sign = np.where(df["side"] == "long", 1, -1)

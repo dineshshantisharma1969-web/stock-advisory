@@ -1,0 +1,24 @@
+# Daily data refresh: prices, FII/DII, fundamentals (weekly) and backtest grades -> Supabase.
+# The Streamlit Cloud app picks up the new data automatically within 30 minutes.
+# Needs repository secrets SUPABASE_URL and SUPABASE_KEY (Settings -> Secrets and variables -> Actions).
+name: Daily data refresh
+on:
+  schedule:
+    - cron: "5 14 * * 1-5"   # 19:35 IST, Mon-Fri (after NSE posts FII/DII figures)
+  workflow_dispatch:          # "Run workflow" button for a manual refresh
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - run: python -m pytest -q
+      - run: python refresh.py
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}

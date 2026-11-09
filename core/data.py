@@ -50,25 +50,80 @@ def empty_fundamentals(symbol: str) -> dict:
 
 
 # ---------------------------------------------------------------- cache
+# Local pickle files, mirrored to a private Supabase Storage bucket when Supabase is configured.
+# A tiny "<name>.meta" file holds the save time, so the app only re-downloads a big file when it changed
+# (e.g. after the scheduled refresh job uploaded new data).
+BUCKET = "desk-cache"
+
+
 def _cache_path(name: str):
     config.CACHE_DIR.mkdir(parents=True, exist_ok=True)
     return config.CACHE_DIR / f"{name}.pkl"
 
 
 def save_cache(name: str, obj) -> None:
-    with open(_cache_path(name), "wb") as f:
-        pickle.dump({"saved": datetime.now(), "data": obj}, f)
+    from . import cloud
+    blob = {"saved": datetime.now(), "data": obj}
+    raw = pickle.dumps(blob)
+    _cache_path(name).write_bytes(raw)
+    c = cloud.client()
+    if c:
+        c.upload(BUCKET, f"{name}.pkl", raw)
+        c.upload(BUCKET, f"{name}.meta", blob["saved"].isoformat().encode(), "text/plain")
+
+
+def _local(name: str):
+    p = _cache_path(name)
+    if not p.exists():
+        return None
+    with open(p, "rb") as f:
+        return pickle.load(f)
+
+
+def _sync_from_cloud(name: str):
+    """Download the cloud copy if it is newer than the local one. Returns the freshest blob or None."""
+    from . import cloud
+    blob = _local(name)
+    c = cloud.client()
+    if not c:
+        return blob
+    try:
+        meta = c.download(BUCKET, f"{name}.meta")
+        if meta is None:
+            return blob
+        remote_saved = datetime.fromisoformat(meta.decode())
+        if blob is None or blob["saved"] < remote_saved:
+            raw = c.download(BUCKET, f"{name}.pkl")
+            if raw:
+                _cache_path(name).write_bytes(raw)
+                blob = pickle.loads(raw)
+    except Exception:
+        pass  # network trouble: fall back to whatever is local
+    return blob
 
 
 def load_cache(name: str, max_age_hours: float | None = None):
-    p = _cache_path(name)
-    if not p.exists():
+    blob = _sync_from_cloud(name)
+    if blob is None:
         return None, None
-    with open(p, "rb") as f:
-        blob = pickle.load(f)
     if max_age_hours is not None and datetime.now() - blob["saved"] > timedelta(hours=max_age_hours):
         return None, blob["saved"]
     return blob["data"], blob["saved"]
+
+
+def cache_saved_at(name: str):
+    """Save time only (cheap: reads the small meta file, never the data)."""
+    from . import cloud
+    c = cloud.client()
+    if c:
+        try:
+            meta = c.download(BUCKET, f"{name}.meta")
+            if meta:
+                return datetime.fromisoformat(meta.decode())
+        except Exception:
+            pass
+    blob = _local(name)
+    return blob["saved"] if blob else None
 
 
 # ---------------------------------------------------------------- Yahoo provider

@@ -35,9 +35,23 @@ non-zero code if a step fails.
 
 ## Tests
 
-`python -m pytest` runs 46 tests that check the maths against independent values: Gordon-growth DCF,
+`python -m pytest` runs 54 tests that check the maths against independent values: Gordon-growth DCF,
 reverse-DCF round trip, put-call parity, a known bank EMI, hand-computed income tax, no-look-ahead
-backtest fills, and tamper detection in the idea book.
+backtest fills, tamper detection in the idea book, and the Supabase backend against a simulated API.
+
+## Persistent storage (Supabase)
+
+With Supabase configured, the idea book, trade journal, FII/DII history and the data cache are stored in
+Supabase instead of local files, so nothing is lost when Streamlit Cloud restarts. The `ideas` table is
+append-only in the database itself (update/delete/truncate blocked by trigger, `prev_hash` unique), and all
+tables have row-level security with no policies, so only the server-side secret key can reach them.
+Configure with `[supabase] url / key` in `.streamlit/secrets.toml` or `SUPABASE_URL` / `SUPABASE_KEY` env vars.
+
+## Automatic daily refresh
+
+`.github/workflows/refresh.yml` runs the tests and `refresh.py` at 19:35 IST on weekdays and saves to
+Supabase. Add `SUPABASE_URL` and `SUPABASE_KEY` as GitHub Actions secrets. Use **Run workflow** on the
+Actions tab for an immediate refresh.
 
 ## Sharing with clients
 
