@@ -130,6 +130,9 @@ def sidebar() -> bool:
                          help="Synthetic data for trying the app without internet. Never real prices.")
         from . import cloud
         st.caption("Storage: ☁️ Supabase (persistent)" if cloud.client() else "Storage: 💻 this computer only")
+        if is_admin() and st.button("Test Supabase connection", use_container_width=True):
+            ok, msg = cloud.diagnose()
+            (st.success if ok else st.error)(msg)
         saved = data.cache_saved_at("prices_live")
         st.caption(f"Live prices cached: {saved:%d %b %Y %H:%M}" if saved else "No live data downloaded yet")
         if not demo and is_admin() and st.button("Refresh live data", use_container_width=True):
@@ -154,6 +157,10 @@ def refresh_live(fundamentals: bool = True):
             data.save_cache("fund_live", fu)
         st.cache_data.clear()
         st.success(f"Updated {len(px)} price histories.")
+        from . import cloud
+        if cloud.client() is None:
+            st.warning("Saved on this server only - Supabase is not connected, so this data is lost when the "
+                       "app restarts. Click 'Test Supabase connection' to see why.")
     except Exception as e:
         st.error(f"Refresh failed: {e}")
 

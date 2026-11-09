@@ -96,6 +96,44 @@ class Supa:
             raise
 
 
+def diagnose() -> tuple[bool, str]:
+    """Plain-English check of the Supabase setup. Never shows the key itself."""
+    import os
+    try:
+        import streamlit as st
+        names = list(st.secrets.keys())
+        sec = st.secrets.get("supabase", None)
+    except Exception:
+        names, sec = [], None
+    url, key = settings()
+    if not (url and key):
+        if sec is None:
+            found = ", ".join(names) or "nothing"
+            return False, ("No [supabase] section found in Secrets (found: " + found + "). Add:\n"
+                           "[supabase]\nurl = \"https://<ref>.supabase.co\"\nkey = \"sb_secret_...\" "
+                           "- the [supabase] lines must come AFTER admin_password and public_url.")
+        missing = [k for k in ("url", "key") if not sec.get(k)]
+        return False, f"[supabase] section is missing: {', '.join(missing)} (found keys: {', '.join(sec.keys()) or 'none'})"
+    if not url.startswith("https://") or ".supabase.co" not in url:
+        return False, f"url looks wrong: {url!r} - expected https://<ref>.supabase.co"
+    kind = ("secret key" if key.startswith("sb_secret_") else "publishable key - use the SECRET key instead"
+            if key.startswith("sb_publishable_") else "legacy JWT key" if key.startswith("eyJ") else "unrecognised key format")
+    c = Supa(url, key)
+    try:
+        c.select("fii_dii", {"limit": 1})
+        c.upload("desk-cache", "connection_test.txt", b"ok", "text/plain")
+        if c.download("desk-cache", "connection_test.txt") != b"ok":
+            return False, "Database OK but Storage read-back failed."
+    except SupabaseError as e:
+        hint = " The key is not allowed to read the tables: use the SECRET key (sb_secret_...)." if e.status in (401, 403) else ""
+        return False, f"Connected to {url} with a {kind}, but the request failed: {e}.{hint}"
+    except Exception as e:
+        return False, f"Could not reach {url}: {e}"
+    global _client
+    _client = c
+    return True, f"Connected: database and storage both work ({kind})."
+
+
 def client() -> Supa | None:
     """Shared client, or None when Supabase is not configured (local mode)."""
     global _client
