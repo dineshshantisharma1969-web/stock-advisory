@@ -80,6 +80,14 @@ def main(argv=None) -> int:
         data.save_cache("backtest_live", backtest.summary(tr) if len(tr) else tr)
         log.info("Backtest saved (%d trades)", len(tr))
 
+    from core import cloud, snapshot, valuation
+    if px and cloud.client():
+        fu, _ = data.load_cache("fund_live")
+        screen = valuation.screen(fu, u) if fu else None
+        bt, _ = data.load_cache("backtest_live")
+        done = snapshot.publish(cloud.client(), px, u, screen, bt, log=log.warning)
+        log.info("Snapshot tables updated: %s", done)
+
     if failed:
         log.error("Finished with failures: %s", ", ".join(failed))
         return 1

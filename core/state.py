@@ -138,6 +138,15 @@ def sidebar() -> bool:
                          help="Synthetic data for trying the app without internet. Never real prices.")
         from . import cloud
         st.caption("Storage: ☁️ Supabase (persistent)" if cloud.client() else "Storage: 💻 this computer only")
+        if is_admin() and not demo and cloud.client() and st.button("Update snapshot (no download)", width="stretch",
+                                                                    help="Write today's readable summary and paper-trade "
+                                                                         "results to Supabase from the data already loaded"):
+            from . import snapshot
+            bt, _ = data.load_cache("backtest_live")
+            with st.spinner("Writing snapshot..."):
+                done = snapshot.publish(cloud.client(), load_prices(False), load_universe(), load_screen(False), bt,
+                                        log=st.caption)
+            st.success("Snapshot: " + ", ".join(f"{k} {v}" for k, v in done.items()))
         if is_admin() and st.button("Test Supabase connection", width="stretch"):
             ok, msg = cloud.diagnose()
             (st.success if ok else st.error)(msg)
@@ -174,6 +183,11 @@ def refresh_live(fundamentals: bool = True):
             msg += f" Fundamentals updated for {n_ok} of {len(syms)}"
             msg += "." if n_ok == len(syms) else "; the rest keep their previous figures."
         st.cache_data.clear()
+        from . import cloud as _cloud, snapshot
+        if _cloud.client():
+            bt, _ = data.load_cache("backtest_live")
+            done = snapshot.publish(_cloud.client(), px, u, load_screen(False), bt, log=st.caption)
+            msg += f" Snapshot saved ({done.get('market_snapshot', 0)} stocks, {done.get('signals', 0)} signals)."
         st.success(msg)
         from . import cloud
         if cloud.client() is None:

@@ -23,6 +23,7 @@ if admin:
         page("pages/2_Stock_Analysis.py", "Stock analysis", "🔍"),
         page("pages/3_Trading_Ideas.py", "Trading & F&O ideas", "⚡"),
         page("pages/4_Backtest.py", "Backtest", "🧪"),
+        page("pages/15_Paper_Trading.py", "Paper trading", "🎮"),
         page("pages/14_Client_Profiles.py", "Client profiles", "👥"),
         page("pages/11_Client_Access.py", "Client QR code", "📱"),
     ]

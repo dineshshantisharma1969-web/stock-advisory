@@ -31,6 +31,11 @@ if st.button("Run backtest on Nifty 500", type="primary"):
                       allow_short=short)
     st.session_state["bt"] = tr
     data.save_cache(f"backtest_{'demo' if demo else 'live'}", backtest.summary(tr) if len(tr) else tr)
+    from core import cloud, snapshot
+    if not demo and cloud.client() and len(tr):
+        rows = snapshot.grade_rows(backtest.summary(tr))
+        cloud.client().insert("backtest_grades", rows, upsert_on="setup,sample")
+        st.caption(f"Grades saved to Supabase ({len(rows)} rows).")
 
 tr = st.session_state.get("bt")
 if tr is None:

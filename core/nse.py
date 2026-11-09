@@ -120,3 +120,29 @@ def build_history(symbols: list[str], days: int = 600, fetch=fetch_day, today: d
     allp = pd.concat(frames)
     return {sym: g.set_index("date")[["Open", "High", "Low", "Close", "Volume"]].sort_index()
             for sym, g in allp.groupby("symbol")}
+
+
+LOTS_URL = "https://nsearchives.nseindia.com/content/fo/fo_mktlots.csv"
+
+
+def parse_lot_sizes(text: str) -> dict:
+    """NSE fo_mktlots.csv: UNDERLYING, SYMBOL, then one column per expiry month. Uses the nearest month."""
+    df = pd.read_csv(io.StringIO(text))
+    df.columns = [c.strip() for c in df.columns]
+    month_cols = [c for c in df.columns if c.upper() not in ("UNDERLYING", "SYMBOL")]
+    out = {}
+    for _, r in df.iterrows():
+        sym = str(r["SYMBOL"]).strip()
+        for c in month_cols:
+            v = str(r[c]).strip()
+            if v.isdigit():
+                out[sym] = int(v)
+                break
+    return {k: v for k, v in out.items() if k and k.upper() != "SYMBOL"}
+
+
+def fetch_lot_sizes(s=None) -> dict:
+    s = s or session()
+    r = s.get(LOTS_URL, timeout=30)
+    r.raise_for_status()
+    return parse_lot_sizes(r.text)
