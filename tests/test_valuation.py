@@ -121,3 +121,16 @@ def test_usable_fundamentals():
     assert not data.usable_fundamentals(company(price=np.nan))
     assert not data.usable_fundamentals(company(revenue=[], net_income=[]))
     assert not data.usable_fundamentals({**company(), "source": "error: 401"})
+
+
+def test_screen_coerces_text_numbers():
+    """Yahoo sometimes returns numbers as strings; tables must stay numeric (ArrowInvalid otherwise)."""
+    u = data.load_universe().head(5)
+    fu = data.DemoProvider(days=300).all_fundamentals(list(u["symbol"]))
+    first = list(fu)[0]
+    fu[first]["dividend_yield"] = "0.012"
+    fu[list(fu)[1]]["dividend_yield"] = "Infinity%"
+    sc = v.screen(fu, u)
+    assert sc["dividend_yield"].dtype.kind == "f"
+    import pyarrow as pa
+    pa.Table.from_pandas(sc.drop(columns=["name", "industry", "verdict", "quality_gate", "symbol"]))

@@ -195,6 +195,11 @@ def screen(fundamentals: dict, universe: pd.DataFrame) -> pd.DataFrame:
         r.update({"symbol": s, "name": names.get(s, s), "industry": ind.get(s, "")})
         rows.append(r)
     df = pd.DataFrame(rows)
+    # Yahoo occasionally returns numbers as text; a mixed column breaks on-screen tables (ArrowInvalid)
+    text_cols = {"symbol", "name", "industry", "quarter", "period_end", "grade", "verdict", "quality_gate"}
+    for col in df.columns:
+        if col not in text_cols and df[col].dtype == object and col not in ("is_financial", "loss_to_profit"):
+            df[col] = pd.to_numeric(df[col], errors="coerce")
     if df.empty:
         return df
     med = df.groupby("industry")["pe"].transform("median")
