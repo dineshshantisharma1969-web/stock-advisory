@@ -7,7 +7,7 @@ from core import config, state, technicals, valuation
 
 st.set_page_config(page_title="Stock Analysis", page_icon="🔍", layout="wide")
 demo = state.sidebar()
-st.title("🔍 Stock analysis")
+state.hero("Stock analysis", "Charts, intrinsic value and financials for any Nifty 500 company.")
 
 u = state.load_universe()
 px, fu = state.load_prices(demo), state.load_fundamentals(demo)

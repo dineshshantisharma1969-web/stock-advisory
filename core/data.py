@@ -44,6 +44,8 @@ def empty_fundamentals(symbol: str) -> dict:
         "revenue": [], "ebit": [], "ebitda": [], "net_income": [], "eps": [],
         "ocf": [], "capex": [], "interest_expense": np.nan, "tax_rate": np.nan,
         "dividend_yield": np.nan, "source": "", "as_of": "",
+        # quarterly results, aligned by period end (oldest -> newest); NaN where Yahoo has no figure
+        "quarters": {"period_end": [], "revenue": [], "ebit": [], "net_income": [], "eps": []},
     }
 
 
@@ -80,6 +82,22 @@ def _row(df: pd.DataFrame, *names) -> list:
             s = s.sort_index()  # columns are dates
             return [float(x) for x in s.values if pd.notna(x)]
     return []
+
+
+def _quarters(df: pd.DataFrame) -> dict:
+    """Quarterly statement -> aligned lists. Unlike _row, keeps NaNs so the columns stay in step."""
+    q = {"period_end": [], "revenue": [], "ebit": [], "net_income": [], "eps": []}
+    if df is None or df.empty:
+        return q
+    df = df.T.sort_index()
+    pick = {"revenue": ("Total Revenue", "Operating Revenue"), "ebit": ("EBIT", "Operating Income"),
+            "net_income": ("Net Income Common Stockholders", "Net Income"), "eps": ("Diluted EPS", "Basic EPS")}
+    q["period_end"] = [pd.Timestamp(d).strftime("%Y-%m-%d") for d in df.index]
+    for k, names in pick.items():
+        col = next((n for n in names if n in df.columns), None)
+        q[k] = [float(v) if pd.notna(v) else np.nan for v in
+                (pd.to_numeric(df[col], errors="coerce") if col else [np.nan] * len(df))]
+    return q
 
 
 def _last(lst, default=np.nan):
@@ -139,6 +157,10 @@ class YahooProvider:
             "book_equity": _last(_row(bs, "Stockholders Equity", "Common Stock Equity")),
             "source": self.name, "as_of": datetime.now().strftime("%Y-%m-%d"),
         })
+        try:
+            f["quarters"] = _quarters(t.quarterly_income_stmt)
+        except Exception:
+            pass
         pretax, tax = _last(_row(inc, "Pretax Income")), _last(_row(inc, "Tax Provision"))
         if pretax and pretax > 0 and pd.notna(tax):
             f["tax_rate"] = float(np.clip(tax / pretax, 0, 0.4))
@@ -219,6 +241,15 @@ class DemoProvider:
             "book_equity": revenue[-1] * rng.uniform(0.3, 1.2), "tax_rate": 0.25,
             "source": self.name, "as_of": self.end.strftime("%Y-%m-%d"),
         })
+        # 8 synthetic quarters ending at the last completed quarter-end
+        ends = pd.date_range(end=self.end - pd.offsets.QuarterEnd(0) if self.end.is_quarter_end
+                             else self.end - pd.offsets.QuarterEnd(1), periods=8, freq="QE")
+        qrev = [revenue[-1] / 4 * (1 + g) ** ((i - 7) / 4) * (1 + rng.normal(0, 0.05)) for i in range(8)]
+        qm = [margin + rng.normal(0, 0.02) for _ in range(8)]
+        qebit = [r * m for r, m in zip(qrev, qm)]
+        qni = [e * 0.72 for e in qebit]
+        f["quarters"] = {"period_end": [d.strftime("%Y-%m-%d") for d in ends], "revenue": qrev, "ebit": qebit,
+                         "net_income": qni, "eps": [n / shares for n in qni]}
         return f
 
     def all_fundamentals(self, symbols, progress=None) -> dict:

@@ -1,4 +1,4 @@
-"""Nifty 500 Research Desk - home dashboard.  Run:  streamlit run app.py"""
+"""Nifty 500 Research Desk - home dashboard.  Run:  streamlit run Home.py"""
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
@@ -7,8 +7,9 @@ from core import data, ledger, market, state, technicals
 
 st.set_page_config(page_title="Nifty 500 Research Desk", page_icon="📊", layout="wide")
 demo = state.sidebar()
-st.title("📊 Nifty 500 Research Desk")
-st.caption("Fundamental value ideas, technical swing & F&O setups, breadth, flows and macro - with an auditable track record.")
+state.hero("Market command centre", "Value ideas, swing &amp; F&amp;O setups, breadth, flows and macro, with an auditable track record.")
+
+state.quick_links()
 
 px = state.load_prices(demo)
 if state.need_data(px):

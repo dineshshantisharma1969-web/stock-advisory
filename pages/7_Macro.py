@@ -5,7 +5,7 @@ from core import market, state
 
 st.set_page_config(page_title="Macro", page_icon="🌍", layout="wide")
 demo = state.sidebar()
-st.title("🌍 Macro picture")
+state.hero("Macro picture", "Currency, crude, yields, volatility and the economy.")
 
 
 @st.cache_data(ttl=3600, show_spinner="Loading macro data...")

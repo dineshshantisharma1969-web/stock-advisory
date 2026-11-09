@@ -2,3 +2,4 @@ data/cache/
 data/*.db
 __pycache__/
 .pytest_cache/
+.streamlit/secrets.toml

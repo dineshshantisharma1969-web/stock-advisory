@@ -5,7 +5,7 @@ from core import ledger, state, valuation
 
 st.set_page_config(page_title="Fundamental Ideas", page_icon="📈", layout="wide")
 demo = state.sidebar()
-st.title("📈 Fundamental ideas")
+state.hero("Fundamental ideas", "DCF, reverse DCF, EV, PE, PEG, growth and quality, ranked across the Nifty 500.")
 st.caption("Composite score from DCF margin of safety, reverse-DCF growth gap, PEG, PE vs industry, EV/EBITDA, "
            "profit growth, ROCE/ROE, margin trend, leverage and FCF yield. Each factor is percentile-ranked "
            "across the Nifty 500. 'Strong idea' also requires passing the quality gate.")
@@ -61,6 +61,8 @@ if len(v):
     if r["is_financial"]:
         st.caption("Financial company: DCF/EV not applied; judged on PE, P/B, ROE and growth.")
     st.page_link("pages/2_Stock_Analysis.py", label=f"Open full analysis of {r['symbol']} →")
+    if not state.is_admin():
+        st.stop()
     with st.form("pub_f"):
         horizon = st.number_input("Holding horizon (trading days)", 20, 1000, 250)
         target = st.number_input("Target price", value=float(r["dcf_value"]) if pd.notna(r["dcf_value"]) else float(r["price"]) * 1.25)

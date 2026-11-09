@@ -6,7 +6,7 @@ from core import market, state
 
 st.set_page_config(page_title="Market Breadth", page_icon="🌊", layout="wide")
 demo = state.sidebar()
-st.title("🌊 Market breadth - Nifty 500")
+state.hero("Market breadth", "How many stocks are really participating in the move.")
 
 b = state.load_breadth(demo)
 if state.need_data(b):

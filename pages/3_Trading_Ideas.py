@@ -6,7 +6,7 @@ from core import fno, ledger, market, state, technicals
 
 st.set_page_config(page_title="Trading & F&O Ideas", page_icon="⚡", layout="wide")
 demo = state.sidebar()
-st.title("⚡ Swing & F&O ideas")
+state.hero("Swing &amp; F&amp;O ideas", "Technical setups with defined entry, stop, target and position size.")
 st.caption("Rule-based setups on MACD, 20/50/200 DMA, Bollinger Bands, RSI, ADX, Supertrend and volume. "
            "Every idea carries an ATR-based stop and a fixed reward:risk target.")
 
@@ -98,6 +98,8 @@ with right:
         st.plotly_chart(pf, use_container_width=True)
         st.caption(s["note"])
         desc = s["name"] + ": " + legs
+    if not state.is_admin():
+        st.stop()
     with st.form("pub_t"):
         horizon = st.number_input("Horizon (sessions)", 3, 60, 20)
         note = st.text_area("Rationale (stored permanently)", f"{r['setup']} on {r['date']}; regime {regime}")

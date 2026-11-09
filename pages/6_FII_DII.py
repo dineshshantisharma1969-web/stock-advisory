@@ -6,7 +6,7 @@ from core import market, state
 
 st.set_page_config(page_title="FII / DII", page_icon="💰", layout="wide")
 demo = state.sidebar()
-st.title("💰 FII / DII cash-market flows")
+state.hero("FII / DII flows", "Institutional money in and out of Indian equities.")
 st.caption("NSE publishes provisional FII/DII cash figures (₹ crore) for the latest day only. The app stores "
            "each day in data/fii_dii_history.csv so history builds up; run `python refresh.py` daily after 7pm IST.")
 
