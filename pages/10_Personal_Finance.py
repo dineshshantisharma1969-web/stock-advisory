@@ -38,7 +38,7 @@ with t_sip:
     fig = go.Figure([go.Bar(x=sch["year"], y=sch["invested"], name="Invested", marker_color="#38bdf8"),
                      go.Bar(x=sch["year"], y=sch["gain"], name="Growth", marker_color="#22c55e")])
     fig.update_layout(barmode="stack", height=360, xaxis_title="Year", yaxis_tickprefix="₹", margin=dict(l=10, r=10, t=10, b=10))
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
     st.caption("Returns are assumptions, not promises. Equity funds can fall 30-50% in bad years.")
 
 with t_goal:
@@ -95,7 +95,7 @@ with t_loan:
     fig = go.Figure([go.Scatter(x=base["month"] / 12, y=base["balance"], name="Without prepayment"),
                      go.Scatter(x=new["month"] / 12, y=new["balance"], name="With prepayment", line=dict(color="#22c55e"))])
     fig.update_layout(height=340, xaxis_title="Years", yaxis_title="Outstanding ₹", margin=dict(l=10, r=10, t=10, b=10))
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 
 with t_tax:
     st.caption(f"{pf.TAX_REGIMES['new']['label']} · {pf.TAX_REGIMES['old']['label']}. Resident individual below 60, "
@@ -117,7 +117,7 @@ with t_tax:
     k[2].metric("Better choice", f"{cmp['better'].title()} regime", f"saves {rupees(cmp['saving'])}")
     st.dataframe(pd.DataFrame({"New": cmp["new"], "Old": cmp["old"]}).drop(["regime"]).map(
         lambda v: f"₹{v:,.0f}" if isinstance(v, float) and v > 1 else f"{v:.1%}" if isinstance(v, float) else v),
-        use_container_width=True)
+        width="stretch")
 
 with t_alloc:
     a, b = st.columns(2)
@@ -128,7 +128,7 @@ with t_alloc:
                            marker=dict(colors=["#22c55e", "#38bdf8", "#f59e0b"])))
     fig.update_layout(height=320, margin=dict(l=10, r=10, t=10, b=10))
     c1, c2 = st.columns(2)
-    c1.plotly_chart(fig, use_container_width=True)
+    c1.plotly_chart(fig, width="stretch")
     with c2:
         st.markdown("**Starting-point allocation** (rule of thumb: equity ≈ 100 − age, adjusted for risk).")
         m_exp = st.number_input("Monthly household expenses (₹)", 5_000, 10_000_000, 60_000, 5_000, key="me")

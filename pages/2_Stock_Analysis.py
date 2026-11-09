@@ -24,7 +24,7 @@ tab_t, tab_v, tab_f = st.tabs(["Technical chart", "Valuation (DCF / reverse DCF 
 with tab_t:
     show = st.multiselect("Overlays", ["dma", "bb"], ["dma", "bb"],
                           format_func={"dma": "20/50/200 DMA", "bb": "Bollinger Bands (20,2)"}.get)
-    st.plotly_chart(state.price_chart(px[sym], sym, show), use_container_width=True)
+    st.plotly_chart(state.price_chart(px[sym], sym, show), width="stretch")
     x = technicals.add_indicators(px[sym]).iloc[-1]
     c = st.columns(6)
     c[0].metric("Close", state.num(x["Close"]))
@@ -80,7 +80,7 @@ with tab_v:
                                       for gg in gs] for ww in ws],
                                     index=[f"WACC {ww:.1%}" for ww in ws], columns=[f"g {gg:.0%}" for gg in gs])
                 st.caption("Sensitivity: value per share")
-                st.dataframe(grid.style.format("{:,.0f}"), use_container_width=True)
+                st.dataframe(grid.style.format("{:,.0f}"), width="stretch")
 
 with tab_f:
     if f:
@@ -91,6 +91,6 @@ with tab_f:
                            index=yrs) / 1e7
         fig = go.Figure([go.Bar(x=fin.index, y=fin[c], name=c) for c in fin.columns])
         fig.update_layout(barmode="group", height=360, yaxis_title="₹ crore", margin=dict(l=10, r=10, t=10, b=10))
-        st.plotly_chart(fig, use_container_width=True)
-        st.dataframe(fin.style.format("{:,.0f}"), use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
+        st.dataframe(fin.style.format("{:,.0f}"), width="stretch")
         st.caption(f"Source: {f['source']} · as of {f['as_of']}")

@@ -36,7 +36,7 @@ if tr is None:
     s, saved = data.load_cache(f"backtest_{'demo' if demo else 'live'}")
     if s is not None and len(s):
         st.caption(f"Last saved summary ({saved:%d %b %Y %H:%M}). Run again for trade-level detail.")
-        st.dataframe(s, hide_index=True, use_container_width=True)
+        st.dataframe(s, hide_index=True, width="stretch")
     st.stop()
 if tr.empty:
     st.write("No trades.")
@@ -44,7 +44,7 @@ if tr.empty:
 
 s = backtest.summary(tr)
 N = __import__("streamlit").column_config.NumberColumn
-st.dataframe(s, hide_index=True, use_container_width=True,
+st.dataframe(s, hide_index=True, width="stretch",
              column_config={"win_rate": N("Win rate", format="percent"), "avg_ret": N("Avg ret", format="percent"),
                             "expectancy_r": N("Expectancy (R)", format="%.2f"), "profit_factor": N("PF", format="%.2f"),
                             "avg_win": N(format="percent"), "avg_loss": N(format="percent"),
@@ -53,5 +53,5 @@ curve = tr.sort_values("exit_date").assign(cum_r=lambda d: d.groupby("setup")["r
 fig = px_.line(curve, x="exit_date", y="cum_r", color="setup", title="Cumulative R by setup")
 fig.add_vline(x=tr.loc[tr["sample"] == "out-of-sample", "entry_date"].min(), line_dash="dash",
               annotation_text="out-of-sample →")
-st.plotly_chart(fig, use_container_width=True)
+st.plotly_chart(fig, width="stretch")
 st.download_button("Download all trades", tr.to_csv(index=False), "backtest_trades.csv")

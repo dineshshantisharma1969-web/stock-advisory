@@ -35,7 +35,7 @@ st.dataframe(
     v[["symbol", "name", "industry", "score", "verdict", "price", "dcf_value", "dcf_upside", "implied_growth",
        "pe", "pe_vs_industry", "peg", "ev_ebitda", "pb", "np_cagr", "np_growth_yoy", "roce", "roe",
        "op_margin", "op_margin_change", "debt_equity", "interest_cover", "fcf_yield", "market_cap_cr", "quality_gate"]],
-    hide_index=True, use_container_width=True, height=520,
+    hide_index=True, width="stretch", height=520,
     column_config={
         "score": st.column_config.ProgressColumn("Score", min_value=0, max_value=100, format="%.0f"),
         "price": P(format="%.1f"), "dcf_value": P("DCF value", format="%.0f"),

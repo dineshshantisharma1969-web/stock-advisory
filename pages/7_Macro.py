@@ -34,9 +34,9 @@ st.subheader("Relative performance (rebased to 100)")
 pick = st.multiselect("Series", list(m.columns), [c for c in ("Nifty 50", "Nifty Bank", "S&P 500", "Gold") if c in m.columns])
 fig = go.Figure([go.Scatter(x=m.index, y=m[c] / m[c].dropna().iloc[0] * 100, name=c) for c in pick])
 fig.update_layout(height=380, margin=dict(l=10, r=10, t=10, b=10))
-st.plotly_chart(fig, use_container_width=True)
+st.plotly_chart(fig, width="stretch")
 
 st.subheader("India economy (World Bank, annual)")
-st.dataframe(wb.iloc[::-1].style.format("{:.1f}"), use_container_width=True)
+st.dataframe(wb.iloc[::-1].style.format("{:.1f}"), width="stretch")
 st.caption("For RBI repo rate, monthly CPI/IIP and GST collections, add official releases; the World Bank "
            "series are annual and lag by a year.")

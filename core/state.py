@@ -75,7 +75,7 @@ def quick_links():
              ("pages/11_Client_Access.py", "📱  Client QR code")]
     cols = st.columns(len(links))
     for c, (page, label) in zip(cols, links):
-        if c.button(label, use_container_width=True, type="primary" if "Q2" in label else "secondary"):
+        if c.button(label, width="stretch", type="primary" if "Q2" in label else "secondary"):
             st.switch_page(page)
 
 
@@ -104,7 +104,7 @@ def _login_box():
     if _admin_password() is None:
         return
     if st.session_state.get("admin_ok"):
-        if st.button("Log out (admin)", use_container_width=True):
+        if st.button("Log out (admin)", width="stretch"):
             st.session_state["admin_ok"] = False
             st.rerun()
         return
@@ -130,12 +130,12 @@ def sidebar() -> bool:
                          help="Synthetic data for trying the app without internet. Never real prices.")
         from . import cloud
         st.caption("Storage: ☁️ Supabase (persistent)" if cloud.client() else "Storage: 💻 this computer only")
-        if is_admin() and st.button("Test Supabase connection", use_container_width=True):
+        if is_admin() and st.button("Test Supabase connection", width="stretch"):
             ok, msg = cloud.diagnose()
             (st.success if ok else st.error)(msg)
         saved = data.cache_saved_at("prices_live")
         st.caption(f"Live prices cached: {saved:%d %b %Y %H:%M}" if saved else "No live data downloaded yet")
-        if not demo and is_admin() and st.button("Refresh live data", use_container_width=True):
+        if not demo and is_admin() and st.button("Refresh live data", width="stretch"):
             refresh_live()
         st.divider()
         st.caption(config.DISCLAIMER)

@@ -34,8 +34,8 @@ left, right = st.columns([1, 2])
 with left:
     if valid:
         png = make_qr(url)
-        st.image(png, caption=url, use_container_width=True)
-        st.download_button("Download QR (PNG)", png, "client_qr.png", "image/png", use_container_width=True)
+        st.image(png, caption=url, width="stretch")
+        st.download_button("Download QR (PNG)", png, "client_qr.png", "image/png", width="stretch")
     else:
         st.info("Enter the app's public https:// link to generate the QR code.")
 with right:

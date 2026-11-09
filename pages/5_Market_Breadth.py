@@ -37,7 +37,7 @@ fig.add_trace(go.Bar(x=b.index, y=-b["new_52w_lows"], name="52w lows", marker_co
 fig.add_trace(go.Bar(x=b.index, y=b["mcclellan"], name="McClellan",
                      marker_color=["#2ca02c" if v > 0 else "#d62728" for v in b["mcclellan"]]), 4, 1)
 fig.update_layout(height=900, margin=dict(l=10, r=10, t=40, b=10), legend=dict(orientation="h"))
-st.plotly_chart(fig, use_container_width=True)
+st.plotly_chart(fig, width="stretch")
 
 st.subheader("Sector rotation")
 period = st.radio("Return period", [5, 21, 63, 126], index=1, horizontal=True, format_func=lambda d: f"{d} sessions")
@@ -48,4 +48,4 @@ if len(sp):
                           text=[f"{v:.1%}" for v in sp["mean"]]))
     f2.update_layout(height=600, yaxis=dict(autorange="reversed"), xaxis_title="Avg return %",
                      margin=dict(l=10, r=10, t=10, b=10))
-    st.plotly_chart(f2, use_container_width=True)
+    st.plotly_chart(f2, width="stretch")

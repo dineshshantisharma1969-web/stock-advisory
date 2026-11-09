@@ -43,7 +43,7 @@ sig["fno_lot"] = sig["symbol"].map(lots)
 sig = sig.sort_values(["date", "grade"], ascending=[False, True])
 st.write(f"**{len(sig)}** signals")
 N = st.column_config.NumberColumn
-st.dataframe(sig, hide_index=True, use_container_width=True, height=400,
+st.dataframe(sig, hide_index=True, width="stretch", height=400,
              column_config={"entry": N(format="%.1f"), "stop": N(format="%.1f"), "target": N(format="%.1f"),
                             "rsi": N(format="%.0f"), "adx": N(format="%.0f"), "risk_pct": N("Risk %", format="percent"),
                             "fno_lot": N("F&O lot")})
@@ -60,7 +60,7 @@ with left:
     fig = state.price_chart(px[r["symbol"]], r["symbol"], height=620)
     for lvl, col, name in ((r["entry"], "blue", "Entry"), (r["stop"], "red", "Stop"), (r["target"], "green", "Target")):
         fig.add_hline(y=lvl, line=dict(color=col, dash="dash", width=1), annotation_text=name, row=1, col=1)
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 with right:
     st.metric("Entry / Stop / Target", f"{r['entry']:.1f} / {r['stop']:.1f} / {r['target']:.1f}")
     st.write(f"Backtest grade: **{r['grade']}** · Regime: **{r['with_regime']}**")
@@ -95,7 +95,7 @@ with right:
         spots = np.linspace(r["entry"] * 0.85, r["entry"] * 1.15, 200)
         pf = go.Figure(go.Scatter(x=spots, y=fno.payoff(s["legs"], spots), fill="tozeroy"))
         pf.update_layout(height=250, margin=dict(l=10, r=10, t=10, b=10), xaxis_title="Spot at expiry", yaxis_title="P&L ₹")
-        st.plotly_chart(pf, use_container_width=True)
+        st.plotly_chart(pf, width="stretch")
         st.caption(s["note"])
         desc = s["name"] + ": " + legs
     if not state.is_admin():

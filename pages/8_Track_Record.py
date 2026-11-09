@@ -36,14 +36,14 @@ with tab_i:
             if len(closed):
                 cc = closed.sort_values("exit_date").assign(cum=lambda d: (1 + d["ret"]).cumprod() - 1)
                 st.plotly_chart(px_.line(cc, x="exit_date", y="cum", color="kind", title="Cumulative return of closed ideas"),
-                                use_container_width=True)
+                                width="stretch")
                 st.dataframe(closed.groupby(["kind", "setup"]).agg(ideas=("id", "count"), hit_rate=("ret", lambda s: (s > 0).mean()),
                                                                    avg_ret=("ret", "mean"), avg_r=("r_multiple", "mean")),
-                             use_container_width=True)
+                             width="stretch")
             N = st.column_config.NumberColumn
             st.dataframe(ev[["id", "created_utc", "kind", "symbol", "setup", "side", "instrument", "entry", "stop", "target",
                              "status", "fill", "exit", "exit_date", "ret", "r_multiple", "pnl_per_lot", "rationale", "hash"]],
-                         hide_index=True, use_container_width=True,
+                         hide_index=True, width="stretch",
                          column_config={"ret": N("Return", format="percent"), "r_multiple": N("R", format="%.2f"),
                                         "pnl_per_lot": N("P&L / lot ₹", format="%.0f"),
                                         "fill": N(format="%.1f"), "exit": N(format="%.1f")})
@@ -96,8 +96,8 @@ with tab_i:
             k[3].metric("Charges paid", f"₹{t['charges'].fillna(0).sum():,.0f}")
             k[4].metric("Trades", len(t))
             st.dataframe(t.groupby(["segment", "status"])["pnl"].agg(["count", "sum"]).rename(columns={"sum": "P&L ₹"}),
-                         use_container_width=True)
+                         width="stretch")
             if len(cl):
                 eq = cl.sort_values("exit_date").assign(cum=lambda d: d["pnl"].cumsum())
-                st.plotly_chart(px_.line(eq, x="exit_date", y="cum", title="Realised equity curve (₹)"), use_container_width=True)
-            st.dataframe(t, hide_index=True, use_container_width=True)
+                st.plotly_chart(px_.line(eq, x="exit_date", y="cum", title="Realised equity curve (₹)"), width="stretch")
+            st.dataframe(t, hide_index=True, width="stretch")

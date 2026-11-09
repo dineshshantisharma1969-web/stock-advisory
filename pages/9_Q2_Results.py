@@ -37,7 +37,7 @@ k[3].metric("Strong results", int((df["grade"] == "Strong").sum()))
 k[4].metric("Poor results", int((df["grade"] == "Poor").sum()))
 
 N = st.column_config.NumberColumn
-st.dataframe(v, hide_index=True, use_container_width=True, height=480,
+st.dataframe(v, hide_index=True, width="stretch", height=480,
              column_config={"revenue_cr": N("Revenue ₹cr", format="%.0f"), "net_profit_cr": N("Net profit ₹cr", format="%.0f"),
                             "rev_yoy": N("Rev YoY", format="percent"), "rev_qoq": N("Rev QoQ", format="percent"),
                             "np_yoy": N("NP YoY", format="percent"), "np_qoq": N("NP QoQ", format="percent"),
@@ -51,6 +51,6 @@ ind = df.groupby("industry").agg(companies=("symbol", "count"), rev_yoy=("rev_yo
 fig = px_.bar(ind.reset_index(), x="np_yoy", y="industry", orientation="h", hover_data=["companies", "rev_yoy"],
               labels={"np_yoy": "Median net profit YoY"})
 fig.update_layout(height=600, xaxis_tickformat=".0%", margin=dict(l=10, r=10, t=10, b=10))
-st.plotly_chart(fig, use_container_width=True)
+st.plotly_chart(fig, width="stretch")
 st.caption("Yahoo Finance quarterly figures can lag company filings by a few days and may be consolidated or "
            "standalone depending on the company; check the exchange filing before quoting a number.")

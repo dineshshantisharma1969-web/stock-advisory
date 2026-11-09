@@ -36,7 +36,7 @@ with left:
     if len(sc):
         top = sc[sc["verdict"] == "Strong idea"].head(10)
         st.dataframe(top[["symbol", "name", "industry", "score", "price", "dcf_upside", "pe", "peg", "roce"]],
-                     hide_index=True, use_container_width=True,
+                     hide_index=True, width="stretch",
                      column_config={"dcf_upside": st.column_config.NumberColumn("DCF upside", format="percent"),
                                     "roce": st.column_config.NumberColumn("ROCE", format="percent"),
                                     "price": st.column_config.NumberColumn(format="%.1f"),
@@ -52,7 +52,7 @@ with right:
     if len(sig):
         sig["backtest grade"] = sig["setup"].map(grades).fillna("not tested")
         st.dataframe(sig[["symbol", "setup", "side", "entry", "stop", "target", "backtest grade"]].head(12),
-                     hide_index=True, use_container_width=True,
+                     hide_index=True, width="stretch",
                      column_config={k: st.column_config.NumberColumn(format="%.1f") for k in ("entry", "stop", "target")})
     else:
         st.write("No setups triggered on the latest session.")
@@ -65,7 +65,7 @@ fig.add_trace(go.Scatter(x=b.index, y=b["pct_above_200dma"], name="% above 200 D
                          line=dict(dash="dot")))
 fig.update_layout(height=340, margin=dict(l=10, r=10, t=10, b=10), legend=dict(orientation="h"),
                   yaxis2=dict(overlaying="y", side="right", range=[0, 100]))
-st.plotly_chart(fig, use_container_width=True)
+st.plotly_chart(fig, width="stretch")
 
 st.subheader("Track record snapshot")
 ib = ledger.ideas()
