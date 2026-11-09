@@ -36,18 +36,13 @@ def main(argv=None) -> int:
     failed = []
 
     log.info("Prices for %d symbols...", len(syms))
-    try:
-        px = yp.prices(syms)
-        if len(px) < 0.8 * len(syms):
-            raise RuntimeError(f"only {len(px)} of {len(syms)} symbols returned data")
-        data.save_cache("prices_live", px)
-        missing = sorted(set(syms) - set(px))
-        log.info("Prices saved: %d symbols (%d missing%s)", len(px), len(missing),
-                 f": {', '.join(missing[:10])}..." if missing else "")
-    except Exception as e:
-        log.error("Price refresh failed: %s", e)
+    px, msg = data.refresh_prices(syms, log=log.warning)
+    if px is None:
+        log.error(msg)
         failed.append("prices")
-        px = None
+    else:
+        data.save_cache("prices_live", px)
+        log.info(msg)
 
     if a.prices_only:
         return 1 if failed else 0
@@ -65,10 +60,14 @@ def main(argv=None) -> int:
     if a.fundamentals or stale:
         log.info("Fundamentals + quarterly results for %d symbols (takes a while)...", len(syms))
         try:
-            fu = yp.all_fundamentals(syms)
-            bad = [s for s, f in fu.items() if str(f.get("source", "")).startswith("error")]
-            data.save_cache("fund_live", fu)
-            log.info("Fundamentals saved: %d ok, %d errors", len(fu) - len(bad), len(bad))
+            fu = yp.all_fundamentals(syms, prices=px)
+            old, _ = data.load_cache("fund_live")
+            merged, n_ok = data.merge_refresh(old, fu, data.usable_fundamentals)
+            if n_ok:
+                data.save_cache("fund_live", merged)
+            log.info("Fundamentals: %d updated, %d kept from the previous run", n_ok, len(syms) - n_ok)
+            if n_ok < 0.5 * len(syms):
+                raise RuntimeError(f"only {n_ok} of {len(syms)} companies returned usable fundamentals")
         except Exception as e:
             log.error("Fundamentals failed: %s", e)
             failed.append("fundamentals")

@@ -106,3 +106,18 @@ def test_screen_runs_and_strong_ideas_all_pass_gate():
     sc = v.screen(fu, u)
     assert len(sc) == 60 and sc["score"].between(0, 100).all()
     assert (sc.loc[sc["verdict"] == "Strong idea", "quality_gate"] == "pass").all()
+
+
+def test_refresh_merge_keeps_old_data_for_failures():
+    old = {"A": {"v": 1}, "B": {"v": 1}}
+    new = {"A": {"v": 2}, "B": {"v": None}, "C": {"v": 3}}
+    merged, n = data.merge_refresh(old, new, lambda f: f["v"] is not None)
+    assert n == 2 and merged == {"A": {"v": 2}, "B": {"v": 1}, "C": {"v": 3}}
+
+
+def test_usable_fundamentals():
+    good = company()
+    assert data.usable_fundamentals(good)
+    assert not data.usable_fundamentals(company(price=np.nan))
+    assert not data.usable_fundamentals(company(revenue=[], net_income=[]))
+    assert not data.usable_fundamentals({**company(), "source": "error: 401"})

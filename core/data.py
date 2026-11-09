@@ -181,7 +181,7 @@ class YahooProvider:
                 progress(min(i + chunk, len(symbols)) / len(symbols))
         return out
 
-    def fundamentals(self, symbol: str) -> dict:
+    def fundamentals(self, symbol: str, last_price: float | None = None) -> dict:
         import yfinance as yf
         t = yf.Ticker(yahoo_symbol(symbol))
         f = empty_fundamentals(symbol)
@@ -219,15 +219,23 @@ class YahooProvider:
         pretax, tax = _last(_row(inc, "Pretax Income")), _last(_row(inc, "Tax Provision"))
         if pretax and pretax > 0 and pd.notna(tax):
             f["tax_rate"] = float(np.clip(tax / pretax, 0, 0.4))
-        if np.isnan(f["market_cap"]) and pd.notna(f["price"]) and pd.notna(f["shares"]):
+        # Yahoo's company-info call (price, shares, market cap) is the one most often refused with
+        # "401 Invalid Crumb" on shared cloud servers. Fall back to the price history and the balance sheet.
+        f["info_ok"] = bool(info)
+        if pd.isna(f["price"]) and last_price:
+            f["price"] = float(last_price)
+        if pd.isna(f["shares"]):
+            f["shares"] = _last(_row(bs, "Ordinary Shares Number", "Share Issued"))
+        if pd.isna(f["market_cap"]) and pd.notna(f["price"]) and pd.notna(f["shares"]):
             f["market_cap"] = f["price"] * f["shares"]
         return f
 
-    def all_fundamentals(self, symbols: list[str], progress=None, pause: float = 0.3) -> dict:
+    def all_fundamentals(self, symbols: list[str], progress=None, pause: float = 0.3, prices: dict | None = None) -> dict:
         out = {}
         for i, s in enumerate(symbols):
             try:
-                out[s] = self.fundamentals(s)
+                last = float(prices[s]["Close"].iloc[-1]) if prices and s in prices and len(prices[s]) else None
+                out[s] = self.fundamentals(s, last)
             except Exception as e:  # keep going; one bad ticker should not stop 500
                 f = empty_fundamentals(s)
                 f["source"] = f"error: {e}"
@@ -309,6 +317,46 @@ class DemoProvider:
 
     def all_fundamentals(self, symbols, progress=None) -> dict:
         return {s: self.fundamentals(s) for s in symbols}
+
+
+def usable_fundamentals(f: dict) -> bool:
+    """Enough to value the company: a price and at least two years of revenue or profit."""
+    return (not str(f.get("source", "")).startswith("error") and pd.notna(f.get("price"))
+            and (len(f.get("revenue") or []) >= 2 or len(f.get("net_income") or []) >= 2))
+
+
+def merge_refresh(old: dict | None, new: dict, ok=lambda v: True) -> tuple[dict, int]:
+    """Keep previous data for anything this refresh failed to fetch. Returns (merged, n_updated)."""
+    good = {k: v for k, v in new.items() if ok(v)}
+    return {**(old or {}), **good}, len(good)
+
+
+def refresh_prices(symbols: list[str], progress=None, log=print) -> tuple[dict | None, str]:
+    """Yahoo first; if Yahoo refuses most stocks, fall back to NSE bhavcopies. Returns (prices or None, message)."""
+    from . import nse
+    need = 0.8 * len(symbols)
+    try:
+        px = YahooProvider().prices(symbols, progress=progress)
+    except Exception as e:
+        log(f"Yahoo prices failed: {e}")
+        px = {}
+    if len(px) >= need:
+        return px, f"Prices updated for {len(px)} stocks from Yahoo Finance."
+    log(f"Yahoo returned only {len(px)} of {len(symbols)}; trying NSE bhavcopy")
+    old, _ = load_cache("prices_live")
+    try:
+        if old and len(old) >= need:
+            merged, added = nse.extend_prices(old, symbols)
+            if added:
+                return merged, (f"Yahoo was unavailable; added {len(added)} trading day(s) from NSE bhavcopy "
+                                f"(latest {added[-1]:%d %b %Y}).")
+            return None, "Yahoo was unavailable and NSE had no newer days; your previous data is kept."
+        built = nse.build_history(symbols, progress=progress)
+        if len(built) >= need:
+            return built, f"Yahoo was unavailable; built price history for {len(built)} stocks from NSE bhavcopies."
+        return None, f"Yahoo and NSE both failed (NSE gave {len(built)} stocks); previous data kept."
+    except Exception as e:
+        return None, f"Yahoo was unavailable and NSE failed too ({e}); your previous data is kept."
 
 
 def get_provider(demo: bool):

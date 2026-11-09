@@ -148,15 +148,25 @@ def refresh_live(fundamentals: bool = True):
     u = load_universe()
     yp = data.YahooProvider()
     bar = st.progress(0.0, text="Downloading prices for Nifty 500...")
+    syms = list(u["symbol"])
     try:
-        px = yp.prices(list(u["symbol"]), progress=lambda f: bar.progress(f, text=f"Prices {f:.0%}"))
+        px, msg = data.refresh_prices(syms, progress=lambda f: bar.progress(f, text=f"Prices {f:.0%}"))
+        if px is None:
+            # Never overwrite good data with a refresh that failed
+            st.error(msg + " Try again later.")
+            return
         data.save_cache("prices_live", px)
         if fundamentals:
-            fu = yp.all_fundamentals(list(u["symbol"]),
+            fu = yp.all_fundamentals(syms, prices=px,
                                      progress=lambda f: bar.progress(f, text=f"Fundamentals {f:.0%} (slow)"))
-            data.save_cache("fund_live", fu)
+            old, _ = data.load_cache("fund_live")
+            merged, n_ok = data.merge_refresh(old, fu, data.usable_fundamentals)
+            if n_ok:
+                data.save_cache("fund_live", merged)
+            msg += f" Fundamentals updated for {n_ok} of {len(syms)}"
+            msg += "." if n_ok == len(syms) else "; the rest keep their previous figures."
         st.cache_data.clear()
-        st.success(f"Updated {len(px)} price histories.")
+        st.success(msg)
         from . import cloud
         if cloud.client() is None:
             st.warning("Saved on this server only - Supabase is not connected, so this data is lost when the "

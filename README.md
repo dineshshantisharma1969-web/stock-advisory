@@ -35,9 +35,17 @@ non-zero code if a step fails.
 
 ## Tests
 
-`python -m pytest` runs 54 tests that check the maths against independent values: Gordon-growth DCF,
+`python -m pytest` runs 61 tests that check the maths against independent values: Gordon-growth DCF,
 reverse-DCF round trip, put-call parity, a known bank EMI, hand-computed income tax, no-look-ahead
 backtest fills, tamper detection in the idea book, and the Supabase backend against a simulated API.
+
+## Data sources
+
+Prices come from Yahoo Finance first. If Yahoo refuses most stocks (it throttles shared cloud servers),
+the app falls back to NSE's official daily bhavcopy: it appends the missing trading days to the saved
+history, or builds the history from bhavcopies if nothing is saved. Bhavcopy prices are not adjusted for
+splits or bonuses; the next successful Yahoo refresh re-syncs the adjusted history. A refresh that fails
+never overwrites good data, and fundamentals that fail for a company keep that company's previous figures.
 
 ## Persistent storage (Supabase)
 
