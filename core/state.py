@@ -68,9 +68,9 @@ def hero(title: str, subtitle: str = "", kicker: str = BRAND):
                 unsafe_allow_html=True)
 
 
-def quick_links():
+def quick_links(links=None):
     """Big shortcut buttons shown on the home page."""
-    links = [("pages/9_Q2_Results.py", "🧾  Q2 FY27 results"), ("pages/10_Personal_Finance.py", "💼  Personal finance"),
+    links = links or [("pages/9_Q2_Results.py", "🧾  Q2 FY27 results"), ("pages/10_Personal_Finance.py", "💼  Personal finance"),
              ("pages/1_Fundamental_Ideas.py", "📈  Value ideas"), ("pages/3_Trading_Ideas.py", "⚡  Trading & F&O"),
              ("pages/11_Client_Access.py", "📱  Client QR code")]
     cols = st.columns(len(links))
@@ -100,6 +100,13 @@ def is_admin() -> bool:
     return _admin_password() is None or st.session_state.get("admin_ok", False)
 
 
+def require_admin():
+    """Stop the page for clients. Admin pages are also hidden from the client menu."""
+    if not is_admin():
+        st.info("This section is for the research desk. Please use **My calls** and the market pages.")
+        st.stop()
+
+
 def _login_box():
     if _admin_password() is None:
         return
@@ -125,7 +132,8 @@ def sidebar() -> bool:
         st.markdown(f"### 📊 {BRAND}")
         _login_box()
         import os
-        demo = st.toggle("Demo data (offline)", value=st.session_state.get("demo", os.environ.get("DESK_DEMO") == "1"),
+        demo_default = st.session_state.get("demo", os.environ.get("DESK_DEMO") == "1")
+        demo = demo_default if not is_admin() else st.toggle("Demo data (offline)", value=demo_default,
                          key="demo",
                          help="Synthetic data for trying the app without internet. Never real prices.")
         from . import cloud
@@ -220,6 +228,21 @@ def backtest_grades(demo: bool) -> dict:
     if s is None or s.empty:
         return {}
     return s.drop_duplicates("setup").set_index("setup")["grade"].to_dict()
+
+
+def publish_block_reason(kind: str, grade: str | None = None, verdict: str | None = None,
+                         gate: str | None = None, demo: bool = False) -> str | None:
+    """House rule: only A-graded setups (swing/F&O) and gate-passing Strong ideas (fundamental) get published."""
+    if demo:
+        return "Switch off demo mode to publish - demo ideas would pollute your track record."
+    if kind in ("swing", "fno"):
+        if not grade or not str(grade).startswith("A"):
+            return (f"Not publishable: this setup's out-of-sample backtest grade is '{grade or 'not tested'}'. "
+                    "Only grade A setups are published. Run the Backtest page on live data first.")
+    elif kind == "fundamental":
+        if verdict != "Strong idea" or gate != "pass":
+            return f"Not publishable: needs verdict 'Strong idea' and a passed quality gate (got {verdict}, {gate})."
+    return None
 
 
 def pct(x, d=1):

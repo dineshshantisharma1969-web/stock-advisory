@@ -22,8 +22,10 @@ with tab_i:
         st.info("No ideas published yet.")
     else:
             ev = ledger.evaluate_ideas(ib, px)
-            kind = st.multiselect("Type", ["swing", "fno", "fundamental"], ["swing", "fno", "fundamental"])
-            ev = ev[ev["kind"].isin(kind)]
+            tr = st.radio("Track", ["all"] + list(ledger.TRACKS), horizontal=True,
+                          format_func=lambda t: "All tracks" if t == "all" else ledger.TRACKS[t])
+            if tr != "all":
+                ev = ledger.ideas_for_track(ev, tr)
             closed = ev[ev["status"].isin(["target", "stop", "expired"])]
             c = st.columns(6)
             c[0].metric("Ideas", len(ev))

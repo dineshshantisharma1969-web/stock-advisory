@@ -9,6 +9,7 @@ from core import config, state
 
 st.set_page_config(page_title="Client Access", page_icon="📱", layout="wide")
 demo = state.sidebar()
+state.require_admin()
 state.hero("Client access", "Share the app with clients: one scan opens it on their phone.")
 
 

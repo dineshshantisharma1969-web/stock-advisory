@@ -6,6 +6,7 @@ from core import fno, ledger, market, state, technicals
 
 st.set_page_config(page_title="Trading & F&O Ideas", page_icon="⚡", layout="wide")
 demo = state.sidebar()
+state.require_admin()
 state.hero("Swing &amp; F&amp;O ideas", "Technical setups with defined entry, stop, target and position size.")
 st.caption("Rule-based setups on MACD, 20/50/200 DMA, Bollinger Bands, RSI, ADX, Supertrend and volume. "
            "Every idea carries an ATR-based stop and a fixed reward:risk target.")
@@ -24,7 +25,7 @@ c1, c2, c3, c4 = st.columns(4)
 setups = c1.multiselect("Setups", list(technicals.SETUPS), list(technicals.SETUPS))
 days = c2.slider("Signals in last N sessions", 1, 10, 3)
 sides = c3.multiselect("Direction", ["long", "short"], ["long", "short"])
-only_good = c4.checkbox("Only backtest grade A/B", bool(grades))
+only_good = c4.checkbox("Only grade A (publishable)", bool(grades))
 st.info(f"Market regime **{regime}** - {why}")
 
 sig = technicals.scan({k: v for k, v in px.items()}, setups, days)
@@ -34,7 +35,7 @@ if sig.empty:
 sig = sig[sig["side"].isin(sides)]
 sig["grade"] = sig["setup"].map(grades).fillna("not tested")
 if only_good:
-    sig = sig[sig["grade"].str[0].isin(["A", "B"])]
+    sig = sig[sig["grade"].str.startswith("A")]
 # Trade with the regime: penalise longs in risk-off and shorts in risk-on
 sig["with_regime"] = np.where((regime == "Risk-off") & (sig["side"] == "long") |
                               (regime == "Risk-on") & (sig["side"] == "short"), "against", "ok")
@@ -103,13 +104,22 @@ with right:
     with st.form("pub_t"):
         horizon = st.number_input("Horizon (sessions)", 3, 60, 20)
         note = st.text_area("Rationale (stored permanently)", f"{r['setup']} on {r['date']}; regime {regime}")
-        if st.form_submit_button("Publish to idea book (permanent)"):
-            if demo:
-                st.error("Switch off demo mode to publish.")
+        default_track = "swing" if instrument == "Cash (swing)" else "fno"
+        tracks = st.multiselect("Publish to client tracks", list(ledger.TRACKS), [default_track],
+                                format_func=ledger.TRACKS.get)
+        if "fno" in tracks and instrument == "Stock future":
+            st.caption("Tip: F&O-track clients are best served with the defined-risk option spread.")
+        block = state.publish_block_reason("swing" if instrument == "Cash (swing)" else "fno", r["grade"], demo=demo)
+        if block:
+            st.caption("🔒 " + block)
+        if st.form_submit_button("Publish to idea book (permanent)", disabled=bool(block)):
+            if block:
+                st.error(block)
             else:
                 i = ledger.publish_idea({"kind": "swing" if instrument == "Cash (swing)" else "fno",
                                          "symbol": r["symbol"], "setup": r["setup"], "side": r["side"],
                                          "entry": r["entry"], "stop": r["stop"], "target": r["target"],
                                          "horizon_days": horizon, "instrument": desc,
-                                         "lot_size": lot if instrument != "Cash (swing)" else None, "rationale": note})
+                                         "lot_size": lot if instrument != "Cash (swing)" else None, "rationale": note,
+                                         "tracks": tracks})
                 st.success(f"Published idea #{i}.")

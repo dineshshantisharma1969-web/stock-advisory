@@ -5,6 +5,7 @@ from core import ledger, state, valuation
 
 st.set_page_config(page_title="Fundamental Ideas", page_icon="📈", layout="wide")
 demo = state.sidebar()
+state.require_admin()
 state.hero("Fundamental ideas", "DCF, reverse DCF, EV, PE, PEG, growth and quality, ranked across the Nifty 500.")
 st.caption("Composite score from DCF margin of safety, reverse-DCF growth gap, PEG, PE vs industry, EV/EBITDA, "
            "profit growth, ROCE/ROE, margin trend, leverage and FCF yield. Each factor is percentile-ranked "
@@ -68,12 +69,16 @@ if len(v):
         target = st.number_input("Target price", value=float(r["dcf_value"]) if pd.notna(r["dcf_value"]) else float(r["price"]) * 1.25)
         stop = st.number_input("Review / stop level", value=float(r["price"]) * 0.8)
         note = st.text_area("Rationale (stored permanently)", "; ".join(reasons))
-        if st.form_submit_button("Publish to idea book (permanent)"):
-            if demo:
-                st.error("Switch off demo mode to publish - demo ideas would pollute your track record.")
+        tracks = st.multiselect("Publish to client tracks", list(ledger.TRACKS), ["longterm"], format_func=ledger.TRACKS.get)
+        block = state.publish_block_reason("fundamental", verdict=r["verdict"], gate=r["quality_gate"], demo=demo)
+        if block:
+            st.caption("🔒 " + block)
+        if st.form_submit_button("Publish to idea book (permanent)", disabled=bool(block)):
+            if block:
+                st.error(block)
             else:
                 i = ledger.publish_idea({"kind": "fundamental", "symbol": r["symbol"], "setup": "Fundamental score",
                                          "side": "long", "entry": r["price"], "stop": stop, "target": target,
                                          "horizon_days": horizon, "instrument": "Equity (delivery)",
-                                         "lot_size": None, "rationale": note})
+                                         "lot_size": None, "rationale": note, "tracks": tracks})
                 st.success(f"Published idea #{i}.")

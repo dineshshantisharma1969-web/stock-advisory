@@ -5,6 +5,7 @@ from core import backtest, data, state, technicals
 
 st.set_page_config(page_title="Backtest", page_icon="🧪", layout="wide")
 demo = state.sidebar()
+state.require_admin()
 state.hero("Backtest lab", "Prove a setup on history before it reaches a client.")
 st.markdown("""
 Entry at the **next day's open** (no look-ahead) · stop/target from ATR · if a bar hits both, the **stop counts first** ·

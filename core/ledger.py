@@ -22,14 +22,22 @@ from . import cloud, config
 
 GENESIS = "0" * 64
 IDEA_FIELDS = ["created_utc", "kind", "symbol", "setup", "side", "entry", "stop", "target",
-               "horizon_days", "instrument", "lot_size", "rationale"]
+               "horizon_days", "instrument", "lot_size", "rationale", "tracks"]
+# Client tracks a call can be published to
+TRACKS = {"longterm": "🛡️ Long-term wealth", "swing": "⚖️ Swing trading", "fno": "⚡ F&O"}
+DEFAULT_TRACK = {"fundamental": "longterm", "swing": "swing", "fno": "fno"}
 
 
 def _conn(path=None):
     c = sqlite3.connect(path or config.JOURNAL_DB)
     c.execute("""CREATE TABLE IF NOT EXISTS ideas (id INTEGER PRIMARY KEY, created_utc TEXT, kind TEXT,
         symbol TEXT, setup TEXT, side TEXT, entry REAL, stop REAL, target REAL, horizon_days INTEGER,
-        instrument TEXT, lot_size INTEGER, rationale TEXT, prev_hash TEXT, hash TEXT)""")
+        instrument TEXT, lot_size INTEGER, rationale TEXT, prev_hash TEXT, hash TEXT, tracks TEXT)""")
+    cols = [r[1] for r in c.execute("PRAGMA table_info(ideas)")]
+    if "tracks" not in cols:  # databases created before client tracks existed
+        c.execute("ALTER TABLE ideas ADD COLUMN tracks TEXT")
+    c.execute("""CREATE TABLE IF NOT EXISTS risk_profiles (id INTEGER PRIMARY KEY, created_utc TEXT, client_name TEXT,
+        contact TEXT, answers TEXT, score INTEGER, tracks TEXT, consent INTEGER)""")
     c.execute("""CREATE TABLE IF NOT EXISTS trades (id INTEGER PRIMARY KEY, segment TEXT, symbol TEXT,
         side TEXT, qty REAL, entry_date TEXT, entry REAL, exit_date TEXT, exit REAL, charges REAL,
         idea_id INTEGER, notes TEXT)""")
@@ -41,7 +49,10 @@ def _conn(path=None):
 
 
 def _digest(rec: dict, prev: str) -> str:
-    payload = json.dumps({k: rec[k] for k in IDEA_FIELDS}, sort_keys=True, default=str)
+    fields = {k: rec.get(k) for k in IDEA_FIELDS}
+    if fields.get("tracks") is None:  # ideas published before tracks existed hash exactly as they did then
+        fields.pop("tracks")
+    payload = json.dumps(fields, sort_keys=True, default=str)
     return hashlib.sha256((prev + payload).encode()).hexdigest()
 
 
@@ -57,6 +68,10 @@ def _normalise(rec: dict) -> dict:
         rec[k] = round(float(rec[k]), 2) if rec[k] is not None else None
     for k in ("lot_size", "horizon_days"):
         rec[k] = int(rec[k]) if rec[k] is not None and not pd.isna(rec[k]) else None
+    t = rec.get("tracks")
+    if isinstance(t, (list, tuple, set)):
+        t = ",".join(sorted(x for x in t if x in TRACKS)) or None
+    rec["tracks"] = t or None
     return rec
 
 
@@ -193,4 +208,39 @@ def trades(prices: dict | None = None, path=None) -> pd.DataFrame:
     df["mark"] = np.where(df["exit"].notna(), df["exit"], last)
     df["status"] = np.where(df["exit"].notna(), "closed", "open")
     df["pnl"] = (df["mark"] - df["entry"]) * df["qty"] * sign - df["charges"].fillna(0)
+    return df
+
+
+def ideas_for_track(df: pd.DataFrame, track: str) -> pd.DataFrame:
+    """Ideas published to a client track. Ideas without tags fall back to their kind's default track."""
+    if df.empty:
+        return df
+    tr = df["tracks"].where(df["tracks"].notna() & (df["tracks"] != ""), df["kind"].map(DEFAULT_TRACK))
+    return df[tr.fillna("").str.split(",").apply(lambda xs: track in xs)]
+
+
+# ------------------------------------------------------------------ client risk profiles
+def save_profile(p: dict, path=None) -> int:
+    rec = {"created_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+           "client_name": p.get("client_name"), "contact": p.get("contact"), "answers": p["answers"],
+           "score": int(p["score"]), "tracks": ",".join(p["tracks"]), "consent": bool(p.get("consent"))}
+    c = _cloud(path)
+    if c:
+        return int(c.insert("risk_profiles", [rec])[0]["id"])
+    with _conn(path) as c:
+        cur = c.execute("INSERT INTO risk_profiles (created_utc,client_name,contact,answers,score,tracks,consent) "
+                        "VALUES (?,?,?,?,?,?,?)", [rec["created_utc"], rec["client_name"], rec["contact"],
+                                                   json.dumps(rec["answers"]), rec["score"], rec["tracks"],
+                                                   int(rec["consent"])])
+        return cur.lastrowid
+
+
+def profiles(path=None) -> pd.DataFrame:
+    c = _cloud(path)
+    if c:
+        return pd.DataFrame(c.select("risk_profiles", {"order": "id.desc"}))
+    with _conn(path) as c:
+        df = pd.read_sql("SELECT * FROM risk_profiles ORDER BY id DESC", c)
+    if len(df):
+        df["answers"] = df["answers"].map(json.loads)
     return df

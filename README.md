@@ -35,9 +35,22 @@ non-zero code if a step fails.
 
 ## Tests
 
-`python -m pytest` runs 61 tests that check the maths against independent values: Gordon-growth DCF,
+`python -m pytest` runs 70 tests that check the maths against independent values: Gordon-growth DCF,
 reverse-DCF round trip, put-call parity, a known bank EMI, hand-computed income tax, no-look-ahead
 backtest fills, tamper detection in the idea book, and the Supabase backend against a simulated API.
+
+## Clients, tracks and publishing rules
+
+`Home.py` builds the menu. Clients see: Welcome, My calls, Risk profile, Track record, market pages,
+Q2 results and Personal finance. The research desk (screener, stock analysis, scanner, backtest, client
+profiles, QR code) appears only after admin login; those pages also refuse clients who open them directly.
+
+- **Risk profile:** 8 questions score 0-32 and map the client to tracks: Long-term (everyone), Swing
+  (moderate score and a horizon over a year) and F&O (hard gates: trading experience, emergency fund,
+  tolerance for a 20%+ loss, score 24+). Clients may save their answers; admins see them under Client profiles.
+- **Publishing rule:** swing and F&O calls can be published only for setups graded **A** out-of-sample
+  in the latest backtest on live data; fundamental calls only for "Strong idea" stocks that pass the
+  quality gate. Each call is tagged with the tracks it is for and stays in the tamper-evident record.
 
 ## Data sources
 
