@@ -35,9 +35,19 @@ non-zero code if a step fails.
 
 ## Tests
 
-`python -m pytest` runs 70 tests that check the maths against independent values: Gordon-growth DCF,
+`python -m pytest` runs 85 tests that check the maths against independent values: Gordon-growth DCF,
 reverse-DCF round trip, put-call parity, a known bank EMI, hand-computed income tax, no-look-ahead
 backtest fills, tamper detection in the idea book, and the Supabase backend against a simulated API.
+
+## Strategies (v2)
+
+Besides the six classic setups, four strategies use market-wide context computed across the Nifty 500
+(no look-ahead): **breadth regime** (`mkt_ok`: at least 50% of stocks above their 200 DMA) and
+**relative strength** (`rs_pct`: percentile of the 6-month return skipping the latest month).
+Momentum leaders, MACD trend + regime and RS breakout exit on a **3x ATR trailing stop** (no fixed target);
+RSI pullback + regime keeps a 2x ATR stop and 2R target. All v2 strategies are long-only.
+Grade **A** now also requires a positive expectancy in the in-sample period, so a strategy that only
+looks good in the recent months is held at B.
 
 ## Clients, tracks and publishing rules
 

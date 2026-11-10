@@ -154,6 +154,41 @@ def rule_supertrend_flip(x):
     return _sig((st.shift() < 0) & (st > 0) & (x["adx"] > 20), (st.shift() > 0) & (st < 0) & (x["adx"] > 20))
 
 
+# ---- v2 strategies: need market-wide columns from market_features() (mkt_ok, rs_pct)
+def _first_day(cond):
+    """Signal only on the first day a condition becomes true (avoids a signal every day)."""
+    cond = cond.fillna(False).astype(bool)
+    return cond & ~cond.shift(fill_value=False)
+
+
+def _mkt(x):
+    return x["mkt_ok"].fillna(False).astype(bool) if "mkt_ok" in x else pd.Series(False, index=x.index)
+
+
+def _rs(x):
+    return x["rs_pct"] if "rs_pct" in x else pd.Series(np.nan, index=x.index)
+
+
+def rule_momentum_leaders(x):
+    """Top-10% 6-month relative strength (skipping the last month), above the 50 DMA, healthy market."""
+    return _sig(_first_day((_rs(x) >= 0.9) & (x["Close"] > x["dma50"]) & _mkt(x)))
+
+
+def rule_regime_macd(x):
+    """MACD bullish cross above the 200 DMA, only when market breadth is healthy. Long only."""
+    return _sig(_cross_up(x["macd"], x["signal"]) & (x["Close"] > x["dma200"]) & _mkt(x))
+
+
+def rule_regime_rsi_pullback(x):
+    """RSI recovers above 40 in an uptrend, only when market breadth is healthy. Long only."""
+    return _sig((x["Close"] > x["dma200"]) & (x["rsi"].shift() < 40) & (x["rsi"] >= 40) & _mkt(x))
+
+
+def rule_rs_breakout(x):
+    """52-week-high breakout on 1.5x volume by a top-20% relative-strength stock, healthy market."""
+    return _sig((x["Close"] > x["hi52"].shift()) & (x["Volume"] > 1.5 * x["vol20"]) & (_rs(x) >= 0.8) & _mkt(x))
+
+
 SETUPS = {
     "Golden/Death cross (50/200 DMA)": rule_golden_cross,
     "MACD crossover with 200-DMA trend": rule_macd_trend,
@@ -161,7 +196,45 @@ SETUPS = {
     "RSI pullback in trend": rule_rsi_pullback,
     "52-week high breakout on volume": rule_52w_breakout,
     "Supertrend flip (ADX>20)": rule_supertrend_flip,
+    "Momentum leaders (RS top 10%, trailing stop)": rule_momentum_leaders,
+    "MACD trend + market regime (trailing stop)": rule_regime_macd,
+    "RSI pullback + market regime": rule_regime_rsi_pullback,
+    "RS breakout to 52w high (trailing stop)": rule_rs_breakout,
 }
+
+# How each setup exits. "fixed": ATR stop + R-multiple target; "trail": ATR stop that follows the highest
+# close (lets winners run) with no fixed target. Setups not listed use the fixed defaults.
+EXITS = {
+    "Momentum leaders (RS top 10%, trailing stop)": {"mode": "trail", "atr_mult": 3.0, "max_hold": 60},
+    "MACD trend + market regime (trailing stop)": {"mode": "trail", "atr_mult": 3.0, "max_hold": 40},
+    "RS breakout to 52w high (trailing stop)": {"mode": "trail", "atr_mult": 3.0, "max_hold": 60},
+    "RSI pullback + market regime": {"mode": "fixed", "atr_mult": 2.0, "rr": 2.0, "max_hold": 20},
+}
+
+
+def exit_rule(setup: str) -> dict:
+    return {"mode": "fixed", "atr_mult": config.ATR_STOP_MULT, "rr": config.REWARD_RISK, "max_hold": 20,
+            **EXITS.get(setup, {})}
+
+
+def market_features(prices: dict, breadth_min: float = 50.0) -> dict:
+    """Per-symbol market columns computed across the whole universe (no look-ahead: day t uses closes to t).
+    mkt_ok: % of Nifty 500 stocks above their 200 DMA >= breadth_min.
+    rs_pct: percentile rank of the 6-month return skipping the latest month (classic momentum)."""
+    close = pd.DataFrame({s: df["Close"] for s, df in prices.items()}).sort_index()
+    if close.empty:
+        return {}
+    valid = close.notna().sum(axis=1).replace(0, np.nan)
+    pct200 = (close > close.rolling(200).mean()).sum(axis=1) / valid * 100
+    mkt_ok = pct200 >= breadth_min
+    mom = close.shift(21) / close.shift(126) - 1
+    rs = mom.rank(axis=1, pct=True)
+    return {s: pd.DataFrame({"mkt_ok": mkt_ok, "rs_pct": rs[s]}) for s in close.columns}
+
+
+def with_features(x: pd.DataFrame, feats: dict, sym: str) -> pd.DataFrame:
+    f = feats.get(sym)
+    return x.join(f, how="left") if f is not None else x
 
 
 def levels(entry: float, atr_value: float, side: str, atr_mult=config.ATR_STOP_MULT, rr=config.REWARD_RISK) -> dict:
@@ -175,21 +248,26 @@ def scan(prices: dict, setups: list[str] | None = None, lookback_days: int = 1,
          allow_short: bool = True) -> pd.DataFrame:
     """Signals fired in the last `lookback_days` bars across the universe."""
     setups = setups or list(SETUPS)
+    feats = market_features(prices)
     rows = []
     for sym, df in prices.items():
         if len(df) < 210:
             continue
-        x = add_indicators(df)
+        x = with_features(add_indicators(df), feats, sym)
         tail = x.iloc[-lookback_days:]
         for name in setups:
             sig = SETUPS[name](x).iloc[-lookback_days:]
+            ex = exit_rule(name)
             for dt, v in sig[sig != 0].items():
                 side = "long" if v > 0 else "short"
                 if side == "short" and not allow_short:
                     continue
                 bar = tail.loc[dt]
-                lv = levels(float(bar["Close"]), float(bar["atr"]), side)
+                # trailing exits have no fixed target; show 3R as a reference level
+                lv = levels(float(bar["Close"]), float(bar["atr"]), side, ex["atr_mult"],
+                            3.0 if ex["mode"] == "trail" else ex["rr"])
                 rows.append({"date": dt.date(), "symbol": sym, "setup": name, "side": side, **lv,
+                             "exit": "trailing" if ex["mode"] == "trail" else "fixed",
                              "rsi": bar["rsi"], "adx": bar["adx"],
                              "risk_pct": abs(lv["entry"] - lv["stop"]) / lv["entry"]})
     return pd.DataFrame(rows)

@@ -25,7 +25,7 @@ if trades.empty:
 res = pd.DataFrame(snapshot.evaluate_paper(trades.to_dict("records"), state.load_prices(False)))
 df = trades.merge(res, left_on="id", right_on="trade_id", how="left")
 df["risk"] = (df["entry"] - df["stop"]).abs() * df["qty"]
-closed = df[df["status"].isin(["target", "stop", "expired"])]
+closed = df[df["status"].isin(["target", "stop", "trail stop", "expired"])]
 opn = df[df["status"] == "open"]
 
 realised, unreal = closed["net_pnl"].sum(), opn["net_pnl"].sum()

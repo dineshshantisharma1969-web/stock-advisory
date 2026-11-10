@@ -124,18 +124,31 @@ def evaluate_trade(t: dict, px: pd.DataFrame | None) -> dict:
             return res
         fill = min(float(first["Open"]), lim) if side > 0 else max(float(first["Open"]), lim)
     stop, target, qty = float(t["stop"]), float(t["target"]), int(t["qty"])
+    init_stop = stop
     horizon = int(t.get("horizon_days") or 10)
+    trail = t.get("trail_atr")
+    trail = float(trail) if trail is not None and not (isinstance(trail, float) and math.isnan(trail)) else None
+    atr = technicals.atr(px).reindex(bars.index) if trail else None
+    best = fill
     status, exit_px, exit_d = "open", float(bars["Close"].iloc[min(len(bars), horizon) - 1]), None
     for j, (d, bar) in enumerate(bars.head(horizon).iterrows()):
         hit_stop = bar["Low"] <= stop if side > 0 else bar["High"] >= stop
-        hit_tgt = bar["High"] >= target if side > 0 else bar["Low"] <= target
+        hit_tgt = (not trail) and (bar["High"] >= target if side > 0 else bar["Low"] <= target)
         if hit_stop:
             gap = (bar["Open"] < stop) if side > 0 else (bar["Open"] > stop)
-            status, exit_px, exit_d = "stop", float(bar["Open"]) if (gap and j > 0) else stop, d
+            status = "trail stop" if trail and stop != init_stop else "stop"
+            exit_px, exit_d = float(bar["Open"]) if (gap and j > 0) else stop, d
             break
         if hit_tgt:
             status, exit_px, exit_d = "target", target, d
             break
+        if trail and pd.notna(atr.iloc[j]):   # ratchet behind the best close, effective from the next bar
+            if side > 0:
+                best = max(best, float(bar["Close"]))
+                stop = max(stop, best - trail * float(atr.iloc[j]))
+            else:
+                best = min(best, float(bar["Close"]))
+                stop = min(stop, best + trail * float(atr.iloc[j]))
     else:
         if len(bars) >= horizon:
             status, exit_d = "expired", bars.index[horizon - 1]

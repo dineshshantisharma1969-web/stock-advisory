@@ -17,18 +17,21 @@ px = state.load_prices(demo)
 if state.need_data(px):
     st.stop()
 
+setups = st.multiselect("Setups", list(technicals.SETUPS), list(technicals.SETUPS))
 c = st.columns(5)
-setups = c[0].multiselect("Setups", list(technicals.SETUPS), list(technicals.SETUPS))
-hold = c[1].number_input("Max holding (sessions)", 3, 60, 20)
+own = c[0].checkbox("Each strategy's own exits", True,
+                    help="Recommended. Trailing-stop strategies keep their trailing stop and holding period. "
+                         "Untick to force the same stop/target on every strategy.")
+hold = c[1].number_input("Max holding (sessions)", 3, 60, 20, disabled=own)
 cost = c[2].number_input("Round-trip cost %", 0.0, 2.0, 0.20, 0.05) / 100
-atr_m = c[3].number_input("Stop = ATR x", 0.5, 5.0, 2.0, 0.5)
-rr = c[4].number_input("Target = R x", 0.5, 5.0, 2.0, 0.5)
+atr_m = c[3].number_input("Stop = ATR x", 0.5, 5.0, 2.0, 0.5, disabled=own)
+rr = c[4].number_input("Target = R x", 0.5, 5.0, 2.0, 0.5, disabled=own)
 short = st.checkbox("Include short signals (needs F&O)", True)
 
 if st.button("Run backtest on Nifty 500", type="primary"):
     bar = st.progress(0.0)
-    tr = backtest.run(px, setups, progress=bar.progress, max_hold=hold, cost_pct=cost, atr_mult=atr_m, rr=rr,
-                      allow_short=short)
+    overrides = {} if own else {"max_hold": hold, "atr_mult": atr_m, "rr": rr}
+    tr = backtest.run(px, setups, progress=bar.progress, cost_pct=cost, allow_short=short, **overrides)
     st.session_state["bt"] = tr
     data.save_cache(f"backtest_{'demo' if demo else 'live'}", backtest.summary(tr) if len(tr) else tr)
     from core import cloud, snapshot

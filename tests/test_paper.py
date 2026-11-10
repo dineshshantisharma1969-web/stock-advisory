@@ -73,3 +73,12 @@ def test_snapshot_rows_are_json_safe():
     rows = snapshot.snapshot_rows(px, u)
     json.dumps(rows, allow_nan=False)
     assert len(rows) == 3 and rows[0]["close"] > 0
+
+
+def test_trailing_paper_trade_locks_in_profit():
+    rows = [(100, 101, 99, 100)] * 20 + [(100 + 2 * i, 102 + 2 * i, 99 + 2 * i, 101 + 2 * i) for i in range(20)] \
+           + [(130, 131, 110, 112)]
+    px = bars(rows, start="2026-09-01")
+    t = trade(trade_date="2026-09-29", entry=100.0, stop=94.0, target=999.0, trail_atr=3.0, horizon_days=60)
+    r = snapshot.evaluate_trade(t, px)
+    assert r["status"] == "trail stop" and r["exit"] > 110 and r["net_pnl"] > 0

@@ -99,3 +99,47 @@ def test_breadth_counts():
     last = b.iloc[-1]
     assert last["advances"] == 1 and last["declines"] == 1
     assert last["pct_above_200dma"] == 50
+
+
+def test_grade_needs_both_periods():
+    good = {"trades": 50, "expectancy_r": 0.3, "profit_factor": 1.6}
+    assert backtest.grade(good, {"expectancy_r": 0.1, "profit_factor": 1.2}).startswith("A")
+    assert backtest.grade(good, {"expectancy_r": -0.1, "profit_factor": 0.9}).startswith("B")
+
+
+def test_trailing_stop_lets_winner_run(monkeypatch):
+    """Steady uptrend then a drop: the trailing stop exits near the top, far beyond a fixed 2R target."""
+    def rule(x):
+        s = pd.Series(0, index=x.index)
+        s.iloc[30] = 1
+        return s
+    monkeypatch.setitem(t.SETUPS, "trail-test", rule)
+    monkeypatch.setitem(backtest.SETUPS, "trail-test", rule)
+    monkeypatch.setitem(t.EXITS, "trail-test", {"mode": "trail", "atr_mult": 3.0, "max_hold": 200})
+    close = np.r_[[100.0] * 31, np.linspace(100, 200, 60), np.linspace(200, 150, 20)]
+    x = t.add_indicators(frame(close, spread=0.5))
+    tr = backtest.backtest_symbol("X", x, "trail-test")
+    assert len(tr) == 1 and tr[0]["reason"] == "trail stop"
+    assert tr[0]["exit"] > 180 and tr[0]["r"] > 5        # a fixed 2R target would have exited near 106
+
+
+def test_market_features_no_lookahead():
+    a = frame(np.linspace(100, 300, 300))
+    b = frame(np.linspace(300, 100, 300))
+    f = t.market_features({"A": a, "B": b})
+    assert f["A"]["rs_pct"].iloc[-1] == 1.0 and f["B"]["rs_pct"].iloc[-1] == 0.5
+    assert f["A"]["mkt_ok"].iloc[-1]                     # 1 of 2 above 200 DMA = 50% -> ok at threshold 50
+    # changing the future must not change the past
+    a2 = a.copy(); a2.iloc[-1, a2.columns.get_loc("Close")] = 1
+    f2 = t.market_features({"A": a2, "B": b})
+    assert f2["A"]["rs_pct"].iloc[-2] == f["A"]["rs_pct"].iloc[-2]
+
+
+def test_v2_setups_run_on_demo_data():
+    from core import data
+    u = data.load_universe().head(40)
+    px = data.DemoProvider(days=400).prices(list(u["symbol"]))
+    tr = backtest.run(px, [s for s in t.SETUPS if "trailing" in s or "regime" in s])
+    assert len(tr) > 0 and tr["setup"].nunique() >= 2
+    sig = t.scan(px, lookback_days=60)
+    assert {"exit"} <= set(sig.columns)
