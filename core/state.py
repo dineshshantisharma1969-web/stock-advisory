@@ -161,6 +161,7 @@ def sidebar() -> bool:
                     until = datetime.fromisoformat(info["valid_until"]).astimezone(kite.IST)
                     st.caption(f"Zerodha: ✅ connected until {until:%d %b %H:%M} IST")
                 else:
+                    st.caption(f"Kite API key in use: {kite.masked_key()}")
                     st.link_button("🔑 Connect Zerodha (daily login)", kite.login_url(), width="stretch",
                                    help="Opens Zerodha's login page. After login you come back here automatically.")
         if is_admin() and st.button("Test Supabase connection", width="stretch"):

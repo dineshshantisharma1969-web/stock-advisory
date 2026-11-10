@@ -119,3 +119,11 @@ def test_refresh_prefers_kite_then_falls_back(keys, monkeypatch):
     monkeypatch.setattr(data.YahooProvider, "prices", lambda self, s, progress=None: {x: frame for x in s})
     px, msg = data.refresh_prices(syms, log=lambda m: None)
     assert "Yahoo" in msg
+
+
+def test_pasted_keys_are_cleaned(monkeypatch):
+    monkeypatch.setenv("KITE_API_KEY", '  "abcd1234efgh5678"\n')
+    monkeypatch.setenv("KITE_API_SECRET", " sec ")
+    assert kite.settings() == ("abcd1234efgh5678", "sec")
+    assert kite.login_url().endswith("api_key=abcd1234efgh5678")
+    assert kite.masked_key() == "abcd…5678 (16 chars)"

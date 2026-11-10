@@ -33,16 +33,26 @@ SESSION_FILE = "kite_session.json"
 HIST_PAUSE = 0.35  # Kite allows ~3 historical requests per second
 
 
+def _clean(v):
+    """Pasted keys often carry spaces, line breaks or quotes; Kite then reports an invalid api_key."""
+    return str(v).strip().strip('"').strip("'").strip() if v else None
+
+
 def settings() -> tuple[str | None, str | None]:
     k, s = os.environ.get("KITE_API_KEY"), os.environ.get("KITE_API_SECRET")
     if k and s:
-        return k, s
+        return _clean(k), _clean(s)
     try:
         import streamlit as st
         sec = st.secrets.get("kite", {})
-        return sec.get("api_key"), sec.get("api_secret")
+        return _clean(sec.get("api_key")), _clean(sec.get("api_secret"))
     except Exception:
         return None, None
+
+
+def masked_key() -> str:
+    k, _ = settings()
+    return f"{k[:4]}…{k[-4:]} ({len(k)} chars)" if k and len(k) > 8 else "not set"
 
 
 def configured() -> bool:
