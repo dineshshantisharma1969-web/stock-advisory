@@ -99,7 +99,7 @@ def grade_rows(summary: pd.DataFrame | None) -> list[dict]:
         return []
     return [{"setup": r.setup, "sample": r.sample, "trades": int(r.trades), "win_rate": _f(r.win_rate),
              "expectancy_r": _f(r.expectancy_r), "profit_factor": _f(r.profit_factor), "max_dd_r": _f(r.max_dd_r),
-             "grade": r.grade} for r in summary.itertuples()]
+             "grade": r.grade, "run_at": pd.Timestamp.now(tz="UTC").isoformat()} for r in summary.itertuples()]
 
 
 # ------------------------------------------------------------------ paper trading

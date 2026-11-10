@@ -170,3 +170,22 @@ def test_paging_reads_more_than_one_page(supa, monkeypatch):
     for i in range(5):
         ledger.publish_idea(idea(i))
     assert len(ledger.ideas()) == 5
+
+
+def test_prepare_for_claude_writes_everything(supa, monkeypatch):
+    """The one-button daily step: backtest + grades + snapshot tables, against the fake Supabase."""
+    from core import data as d, nse, state
+    for t in ("market_snapshot", "signals", "breadth_daily", "backtest_grades", "paper_trades", "paper_results", "fo_lots"):
+        supa.tables[t] = []
+    u = d.load_universe().head(25)
+    px = d.DemoProvider(days=320).prices(list(u["symbol"]))
+    fu = d.DemoProvider(days=320).all_fundamentals(list(u["symbol"]))
+    monkeypatch.setattr(state, "load_prices", lambda demo: px)
+    monkeypatch.setattr(state, "load_universe", lambda: u)
+    monkeypatch.setattr(state, "load_screen", lambda demo: __import__("core.valuation", fromlist=["x"]).screen(fu, u))
+    monkeypatch.setattr(nse, "fetch_lot_sizes", lambda s=None: {"ABC": 100})
+    state.prepare_for_claude()
+    assert len(supa.tables["market_snapshot"]) == 25
+    assert len(supa.tables["backtest_grades"]) >= 2 and supa.tables["breadth_daily"]
+    assert {r["setup"] for r in supa.tables["backtest_grades"]} >= {"Momentum leaders (RS top 10%, trailing stop)"}
+    assert supa.tables["fo_lots"] == [{"symbol": "ABC", "lot_size": 100, "id": 1}]

@@ -259,6 +259,36 @@ def publish_block_reason(kind: str, grade: str | None = None, verdict: str | Non
     return None
 
 
+def prepare_for_claude():
+    """One button: backtest all strategies on the loaded data, save grades, write the Supabase snapshot.
+    No re-download. Each finished step is saved immediately, so an interruption loses only the current step."""
+    from . import backtest, cloud, snapshot
+    c = cloud.client()
+    if not c:
+        st.error("Supabase is not connected.")
+        return
+    px = load_prices(False)
+    if not px:
+        st.error("No live prices loaded yet - tap Refresh live data first.")
+        return
+    with st.status("Preparing data for Claude - keep this screen open (3-6 minutes)", expanded=True) as box:
+        st.write(f"1/3 Backtesting {len(technicals.SETUPS)} strategies on {len(px)} stocks...")
+        bar = st.progress(0.0)
+        tr = backtest.run(px, progress=bar.progress)
+        summ = backtest.summary(tr) if len(tr) else tr
+        data.save_cache("backtest_live", summ)
+        rows = snapshot.grade_rows(summ)
+        if rows:
+            c.insert("backtest_grades", rows, upsert_on="setup,sample")
+        n_a = sum(1 for r in rows if str(r["grade"]).startswith("A")) // 2
+        st.write(f"   saved grades: {len(rows) // 2} strategies, {n_a} graded A")
+        st.write("2/3 Writing market snapshot, signals and breadth...")
+        done = snapshot.publish(c, px, load_universe(), load_screen(False), summ, log=st.write)
+        st.write("   " + ", ".join(f"{k}: {v}" for k, v in done.items()))
+        st.write("3/3 Done.")
+        box.update(label="Ready - tell Claude \"done\"", state="complete", expanded=True)
+
+
 def pct(x, d=1):
     return "-" if pd.isna(x) else f"{x:.{d}%}"
 

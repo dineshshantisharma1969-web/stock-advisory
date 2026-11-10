@@ -14,6 +14,11 @@ state.quick_links([("pages/4_Backtest.py", "🧪  Backtest"), ("pages/15_Paper_T
                    ("pages/3_Trading_Ideas.py", "⚡  Trading & F&O"), ("pages/1_Fundamental_Ideas.py", "📈  Value ideas"),
                    ("pages/9_Q2_Results.py", "🧾  Q2 FY27 results")])
 
+if not demo:
+    st.markdown("#### 🤖 Daily step for Claude's paper book")
+    if st.button("▶  Prepare data for Claude (backtest + snapshot)", type="primary", width="stretch"):
+        state.prepare_for_claude()
+
 px = state.load_prices(demo)
 if state.need_data(px):
     st.stop()
