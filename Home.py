@@ -34,7 +34,10 @@ if _qp.get("request_token") and _qp.get("status", "success") == "success":
         info = kite.exchange_token(_qp["request_token"])
         st.toast(f"Zerodha connected ({info.get('user_id') or 'ok'}) until 6:00 am tomorrow", icon="✅")
     except Exception as e:
-        st.error(f"Zerodha login could not be completed: {e}")
+        state.report_error("Zerodha login (token exchange)", e)
+    st.query_params.clear()
+elif _qp.get("status") and _qp.get("status") != "success":
+    st.error(f"Zerodha returned status '{_qp.get('status')}'. Please try Connect Zerodha again.")
     st.query_params.clear()
 
 admin = state.is_admin()
