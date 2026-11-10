@@ -41,4 +41,4 @@ menu["Markets"] = [
 ]
 menu["Tools"] = [page("pages/10_Personal_Finance.py", "Personal finance", "💼")]
 
-st.navigation(menu).run()
+st.navigation(menu, expanded=True).run()
