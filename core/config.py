@@ -1,6 +1,8 @@
 """Central settings. Edit these numbers to match your own assumptions."""
 from pathlib import Path
 
+APP_VERSION = "2026-11-10 v6"  # bump on each release; shown in the sidebar
+
 ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = ROOT / "data"
 CACHE_DIR = DATA_DIR / "cache"

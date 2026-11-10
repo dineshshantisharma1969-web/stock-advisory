@@ -17,7 +17,11 @@ state.quick_links([("pages/4_Backtest.py", "🧪  Backtest"), ("pages/15_Paper_T
 if not demo:
     st.markdown("#### 🤖 Daily step for Claude's paper book")
     if st.button("▶  Prepare data for Claude (backtest + snapshot)", type="primary", width="stretch"):
-        state.prepare_for_claude()
+        run = getattr(state, "prepare_for_claude", None)
+        if run is None:
+            st.error("The app is still running old code. Use Manage app → ⋮ → Reboot app, then try again.")
+        else:
+            run()
 
 px = state.load_prices(demo)
 if state.need_data(px):

@@ -3,9 +3,26 @@
 Clients see only published calls, their risk profile, the track record and market/education pages.
 The research desk (scanner, screener, backtest, publishing) appears only after admin login.
 """
+import hashlib
+import pathlib
+import sys
+
 import streamlit as st
 
-from core import state
+# Streamlit Cloud can keep an older copy of the core/ modules in memory after an update, so new pages
+# call functions the old modules don't have (AttributeError). Fingerprint core/*.py on every run and
+# drop the cached modules whenever the code on disk has changed, so the next import loads the new code.
+_core = pathlib.Path(__file__).parent / "core"
+_stamp = hashlib.md5(b"".join(p.read_bytes() for p in sorted(_core.glob("*.py")))).hexdigest()[:8]
+if "core" in sys.modules and getattr(sys.modules["core"], "_stamp", None) != _stamp:
+    for _m in [m for m in list(sys.modules) if m == "core" or m.startswith("core.")]:
+        del sys.modules[_m]
+    st.cache_data.clear()
+import core  # noqa: E402
+
+core._stamp = _stamp
+
+from core import state  # noqa: E402
 
 st.set_page_config(page_title="Nifty 500 Research Desk", page_icon="📊", layout="wide")
 admin = state.is_admin()

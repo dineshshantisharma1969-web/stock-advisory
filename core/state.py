@@ -130,6 +130,8 @@ def sidebar() -> bool:
     st.markdown(CSS, unsafe_allow_html=True)
     with st.sidebar:
         st.markdown(f"### 📊 {BRAND}")
+        import sys as _sys
+        st.caption(f"Version {config.APP_VERSION} · code {getattr(_sys.modules.get('core'), '_stamp', '-')}")
         _login_box()
         import os
         demo_default = st.session_state.get("demo", os.environ.get("DESK_DEMO") == "1")
