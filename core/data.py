@@ -162,7 +162,7 @@ def _last(lst, default=np.nan):
 class YahooProvider:
     name = "Yahoo Finance"
 
-    def prices(self, symbols: list[str], period: str = "2y", chunk: int = 80, progress=None) -> dict:
+    def prices(self, symbols: list[str], period: str = "5y", chunk: int = 80, progress=None) -> dict:
         import yfinance as yf
         out: dict[str, pd.DataFrame] = {}
         for i in range(0, len(symbols), chunk):

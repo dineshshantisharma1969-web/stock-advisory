@@ -64,7 +64,7 @@ profiles, QR code) appears only after admin login; those pages also refuse clien
 
 ## Data sources
 
-Prices come from Yahoo Finance first. If Yahoo refuses most stocks (it throttles shared cloud servers),
+Prices (5 years of daily history) come from Yahoo Finance first. If Yahoo refuses most stocks (it throttles shared cloud servers),
 the app falls back to NSE's official daily bhavcopy: it appends the missing trading days to the saved
 history, or builds the history from bhavcopies if nothing is saved. Bhavcopy prices are not adjusted for
 splits or bonuses; the next successful Yahoo refresh re-syncs the adjusted history. A refresh that fails

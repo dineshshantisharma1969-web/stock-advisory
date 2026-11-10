@@ -184,8 +184,28 @@ def test_prepare_for_claude_writes_everything(supa, monkeypatch):
     monkeypatch.setattr(state, "load_universe", lambda: u)
     monkeypatch.setattr(state, "load_screen", lambda demo: __import__("core.valuation", fromlist=["x"]).screen(fu, u))
     monkeypatch.setattr(nse, "fetch_lot_sizes", lambda s=None: {"ABC": 100})
+    monkeypatch.setattr(d, "refresh_prices", lambda syms, progress=None, log=print: (None, "offline test"))
     state.prepare_for_claude()
     assert len(supa.tables["market_snapshot"]) == 25
     assert len(supa.tables["backtest_grades"]) >= 2 and supa.tables["breadth_daily"]
     assert {r["setup"] for r in supa.tables["backtest_grades"]} >= {"Momentum leaders (RS top 10%, trailing stop)"}
     assert supa.tables["fo_lots"] == [{"symbol": "ABC", "lot_size": 100, "id": 1}]
+
+
+def test_prepare_extends_short_history(supa, monkeypatch):
+    from core import data as d, nse, state
+    for t in ("market_snapshot", "signals", "breadth_daily", "backtest_grades", "paper_trades", "paper_results", "fo_lots"):
+        supa.tables[t] = []
+    u = d.load_universe().head(20)
+    short = d.DemoProvider(days=300).prices(list(u["symbol"]))          # ~1.2 years
+    long_ = d.DemoProvider(days=1250).prices(list(u["symbol"]))         # ~5 years
+    calls = {}
+    monkeypatch.setattr(state, "load_prices", lambda demo: short)
+    monkeypatch.setattr(state, "load_universe", lambda: u)
+    monkeypatch.setattr(state, "load_screen", lambda demo: None)
+    monkeypatch.setattr(nse, "fetch_lot_sizes", lambda s=None: {})
+    monkeypatch.setattr(d, "refresh_prices", lambda syms, progress=None, log=print: (calls.setdefault("n", long_), "ok"))
+    state.prepare_for_claude()
+    assert "n" in calls
+    saved, _ = d.load_cache("prices_live")
+    assert len(next(iter(saved.values()))) == 1250 and supa.tables["market_snapshot"]

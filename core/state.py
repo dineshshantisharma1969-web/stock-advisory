@@ -296,6 +296,21 @@ def prepare_for_claude():
     if not px:
         st.error("No live prices loaded yet - tap Refresh live data first.")
         return
+    years = max((len(df) for df in px.values()), default=0) / 250
+    if years < config.HISTORY_YEARS - 0.5:
+        with st.status(f"0/3 Price history is {years:.1f} years - downloading {config.HISTORY_YEARS} years "
+                       "(1-3 minutes)...", expanded=True) as pre:
+            try:
+                bar0 = st.progress(0.0)
+                new_px, msg = data.refresh_prices(list(load_universe()["symbol"]), progress=bar0.progress)
+                if new_px is not None:
+                    data.save_cache("prices_live", new_px)
+                    st.cache_data.clear()
+                    px = new_px
+                st.write(msg)
+                pre.update(state="complete")
+            except Exception as e:
+                report_error("Downloading 5-year history", e)
     summ = None
     with st.status("Preparing data for Claude - keep this screen open (3-6 minutes)", expanded=True) as box:
         st.write(f"1/3 Backtesting {len(technicals.SETUPS)} strategies on {len(px)} stocks...")
