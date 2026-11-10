@@ -333,8 +333,16 @@ def merge_refresh(old: dict | None, new: dict, ok=lambda v: True) -> tuple[dict,
 
 def refresh_prices(symbols: list[str], progress=None, log=print) -> tuple[dict | None, str]:
     """Yahoo first; if Yahoo refuses most stocks, fall back to NSE bhavcopies. Returns (prices or None, message)."""
-    from . import nse
+    from . import kite, nse
     need = 0.8 * len(symbols)
+    if kite.configured() and kite.session_info():
+        try:
+            px = kite.prices(symbols, progress=progress)
+            if len(px) >= need:
+                return px, f"Prices updated for {len(px)} stocks from Zerodha Kite."
+            log(f"Kite returned only {len(px)} of {len(symbols)}; trying Yahoo")
+        except Exception as e:
+            log(f"Kite prices failed: {e}; trying Yahoo")
     try:
         px = YahooProvider().prices(symbols, progress=progress)
     except Exception as e:

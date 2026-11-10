@@ -25,6 +25,18 @@ core._stamp = _stamp
 from core import state  # noqa: E402
 
 st.set_page_config(page_title="Nifty 500 Research Desk", page_icon="📊", layout="wide")
+
+# Zerodha sends the browser back here after the daily login with ?request_token=...&status=success
+_qp = st.query_params
+if _qp.get("request_token") and _qp.get("status", "success") == "success":
+    from core import kite
+    try:
+        info = kite.exchange_token(_qp["request_token"])
+        st.toast(f"Zerodha connected ({info.get('user_id') or 'ok'}) until 6:00 am tomorrow", icon="✅")
+    except Exception as e:
+        st.error(f"Zerodha login could not be completed: {e}")
+    st.query_params.clear()
+
 admin = state.is_admin()
 
 

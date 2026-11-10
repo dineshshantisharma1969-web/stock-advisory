@@ -35,7 +35,7 @@ non-zero code if a step fails.
 
 ## Tests
 
-`python -m pytest` runs 85 tests that check the maths against independent values: Gordon-growth DCF,
+`python -m pytest` runs 94 tests that check the maths against independent values: Gordon-growth DCF,
 reverse-DCF round trip, put-call parity, a known bank EMI, hand-computed income tax, no-look-ahead
 backtest fills, tamper detection in the idea book, and the Supabase backend against a simulated API.
 
@@ -61,6 +61,17 @@ profiles, QR code) appears only after admin login; those pages also refuse clien
 - **Publishing rule:** swing and F&O calls can be published only for setups graded **A** out-of-sample
   in the latest backtest on live data; fundamental calls only for "Strong idea" stocks that pass the
   quality gate. Each call is tagged with the tracks it is for and stays in the tamper-evident record.
+
+## Zerodha Kite Connect (primary data source)
+
+1. Subscribe at developers.kite.trade (₹500/month per API key) and create an app.
+2. Set its **Redirect URL** to this app's address (e.g. `https://<your-app>.streamlit.app/`).
+3. Add to Streamlit Secrets: `[kite]` with `api_key = "..."` and `api_secret = "..."`.
+4. Each morning, as admin, tap **Connect Zerodha (daily login)** in the sidebar and log in on Zerodha's
+   page; you return to the app connected until 6:00 am IST next day. The api_secret stays on the server.
+
+When connected, prices (5 years daily) and F&O lot sizes come from Kite; otherwise Yahoo, then NSE.
+Use Kite data on the research-desk side; showing live exchange data to clients may need an NSE licence.
 
 ## Data sources
 

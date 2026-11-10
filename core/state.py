@@ -1,6 +1,8 @@
 """Shared Streamlit state: data-mode switch, cached loaders, refresh, common chart helpers."""
 from __future__ import annotations
 
+from datetime import datetime
+
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
@@ -149,6 +151,18 @@ def sidebar() -> bool:
                 done = snapshot.publish(cloud.client(), load_prices(False), load_universe(), load_screen(False), bt,
                                         log=st.caption)
             st.success("Snapshot: " + ", ".join(f"{k} {v}" for k, v in done.items()))
+        if is_admin() and not demo:
+            from . import kite
+            if not kite.configured():
+                st.caption("Zerodha: not set up (add [kite] api_key / api_secret to Secrets)")
+            else:
+                info = kite.session_info()
+                if info:
+                    until = datetime.fromisoformat(info["valid_until"]).astimezone(kite.IST)
+                    st.caption(f"Zerodha: ✅ connected until {until:%d %b %H:%M} IST")
+                else:
+                    st.link_button("🔑 Connect Zerodha (daily login)", kite.login_url(), width="stretch",
+                                   help="Opens Zerodha's login page. After login you come back here automatically.")
         if is_admin() and st.button("Test Supabase connection", width="stretch"):
             ok, msg = cloud.diagnose()
             (st.success if ok else st.error)(msg)
