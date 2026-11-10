@@ -333,8 +333,20 @@ def merge_refresh(old: dict | None, new: dict, ok=lambda v: True) -> tuple[dict,
 
 def refresh_prices(symbols: list[str], progress=None, log=print) -> tuple[dict | None, str]:
     """Yahoo first; if Yahoo refuses most stocks, fall back to NSE bhavcopies. Returns (prices or None, message)."""
-    from . import kite, nse
+    from . import kite, kotak, nse
     need = 0.8 * len(symbols)
+    if kotak.configured():
+        # Kotak: free, one request per stock tops up the saved 5-year history (first history comes from Yahoo)
+        try:
+            old, _ = load_cache("prices_live")
+            years = max((len(df) for df in (old or {}).values()), default=0) / 250
+            if old and len(old) >= need and years >= config.HISTORY_YEARS - 0.5:
+                merged, n = kotak.top_up(old, symbols, progress=progress)
+                if n >= need:
+                    return merged, f"Prices updated for {n} stocks from Kotak Neo (history kept, latest days added)."
+                log(f"Kotak updated only {n} of {len(symbols)}; trying the next source")
+        except Exception as e:
+            log(f"Kotak prices failed: {e}; trying the next source")
     if kite.configured() and kite.session_info():
         try:
             px = kite.prices(symbols, progress=progress)

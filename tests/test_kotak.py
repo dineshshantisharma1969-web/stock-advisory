@@ -1,0 +1,117 @@
+import json
+from datetime import date
+
+import pandas as pd
+import pytest
+
+from core import config, data, kotak
+
+PATHS = {"data": {"baseFolder": "x", "filesPaths": [
+    "https://lapi.kotaksecurities.com/wso2-scripmaster/v1/prod/2026-11-10/transformed/nse_com.csv",
+    "https://lapi.kotaksecurities.com/wso2-scripmaster/v1/prod/2026-11-10/transformed/nse_fo.csv",
+    "https://lapi.kotaksecurities.com/wso2-scripmaster/v1/prod/2026-11-10/transformed-v1/nse_cm-v1.csv"]}}
+NSE_CM = ("pSymbol,pTrdSymbol,pExchSeg,pSymbolName,pGroup\n"
+          "2885,RELIANCE-EQ,nse_cm,RELIANCE,EQ\n"
+          "1594,INFY-EQ,nse_cm,INFY,EQ\n"
+          "9999,RELINFRA-BE,nse_cm,RELINFRA,BE\n"
+          "7777,RELIANCE-BL,nse_cm,RELIANCE,BL\n")
+NSE_FO = ("pSymbol,pTrdSymbol,pExchSeg,pSymbolName,pInstType,lLotSize,pExpiryDate,dStrikePrice;\n"
+          "1,RELIANCE26NOVFUT,nse_fo,RELIANCE,FUTSTK,500,1,0\n"
+          "2,RELIANCE26DECFUT,nse_fo,RELIANCE,FUTSTK,500,2,0\n"
+          "3,INFY26NOV1500CE,nse_fo,INFY,OPTSTK,400,1,150000\n"
+          "4,NIFTY26NOVFUT,nse_fo,NIFTY,FUTIDX,75,1,0\n")
+
+
+class R:
+    def __init__(self, status, body=None, text=None):
+        self.status_code, self._b = status, body
+        self.text = text if text is not None else json.dumps(body)
+
+    def json(self):
+        return self._b
+
+
+class FakeKotak:
+    def __init__(self):
+        self.hist_calls = []
+
+    def get(self, url, headers=None, params=None, timeout=None):
+        assert headers["Authorization"] == "ck1"
+        if url.endswith("/masterscrip/file-paths"):
+            return R(200, PATHS)
+        if url.endswith("nse_cm-v1.csv"):
+            return R(200, text=NSE_CM)
+        if url.endswith("nse_fo.csv"):
+            return R(200, text=NSE_FO)
+        if url.endswith("/historical/details"):
+            self.hist_calls.append(params)
+            assert params["interval"] == "D"
+            if params["neosymbol"] == "nse_cm|2885":
+                return R(200, {"status": "success", "data": {"candles": [
+                    ["2026-11-09T00:00:00+0530", 1500, 1520, 1490, 1510, 100000, 0],
+                    ["2026-11-10T00:00:00+0530", 1510, 1530, 1505, 1525, 120000, 0]]}})
+            return R(200, {"status": "success", "data": {"candles": []}})
+        return R(404, {})
+
+
+def frame(dates, close=1.0):
+    return pd.DataFrame({"Open": close, "High": close, "Low": close, "Close": close, "Volume": 1.0},
+                        index=pd.to_datetime(dates))
+
+
+def test_tokens_prefer_eq_and_ignore_other_series():
+    kc = kotak.KotakClient("ck1", session=FakeKotak())
+    assert kotak.equity_tokens(kc) == {"RELIANCE": 2885, "INFY": 1594, "RELINFRA": 9999}
+
+
+def test_top_up_appends_only_missing_days():
+    fk = FakeKotak()
+    kc = kotak.KotakClient("ck1", session=fk)
+    old = {"RELIANCE": frame(["2026-11-05", "2026-11-06"]), "INFY": frame(["2026-11-06"])}
+    out, n = kotak.top_up(old, ["RELIANCE", "INFY", "UNKNOWN"], kc=kc, today=date(2026, 11, 10), pause=0)
+    assert n == 1 and list(out["RELIANCE"].index.strftime("%d")) == ["05", "06", "09", "10"]
+    assert out["RELIANCE"]["Close"].iloc[-1] == 1525 and len(out["INFY"]) == 1      # INFY unchanged
+    assert fk.hist_calls[0]["fromdate"] == "2026-11-07" and fk.hist_calls[0]["todate"] == "2026-11-10"
+
+
+def test_top_up_never_asks_beyond_180_days():
+    fk = FakeKotak()
+    kc = kotak.KotakClient("ck1", session=fk)
+    kotak.top_up({"RELIANCE": frame(["2025-01-01"])}, ["RELIANCE"], kc=kc, today=date(2026, 11, 10), pause=0)
+    span = (pd.Timestamp(fk.hist_calls[0]["todate"]) - pd.Timestamp(fk.hist_calls[0]["fromdate"])).days + 1
+    assert span <= kotak.MAX_DAILY_SPAN
+
+
+def test_lot_sizes_from_futures_only():
+    kc = kotak.KotakClient("ck1", session=FakeKotak())
+    assert kotak.lot_sizes(kc) == {"RELIANCE": 500, "NIFTY": 75}
+
+
+def test_bad_key_message():
+    class S:
+        def get(self, *a, **k):
+            return R(403, {"message": "invalid"})
+    with pytest.raises(PermissionError, match="consumer_key"):
+        kotak.KotakClient("bad", session=S()).scrip_file()
+
+
+def test_refresh_uses_kotak_when_history_is_long(monkeypatch, tmp_path):
+    monkeypatch.setattr(config, "CACHE_DIR", tmp_path)
+    monkeypatch.setenv("KOTAK_CONSUMER_KEY", "ck1")
+    from core import cloud
+    cloud.set_client(None)
+    long_hist = frame(pd.bdate_range(end="2026-11-06", periods=1250))
+    data.save_cache("prices_live", {"A": long_hist, "B": long_hist})
+    monkeypatch.setattr(kotak, "top_up", lambda old, syms, progress=None: (old, 2))
+    px, msg = data.refresh_prices(["A", "B"], log=lambda m: None)
+    assert "Kotak" in msg
+    # short history -> Kotak is skipped (it can only add 180 days); Yahoo provides the 5 years
+    data.save_cache("prices_live", {"A": frame(["2026-11-06"]), "B": frame(["2026-11-06"])})
+    monkeypatch.setattr(data.YahooProvider, "prices", lambda self, s, progress=None: {x: long_hist for x in s})
+    px, msg = data.refresh_prices(["A", "B"], log=lambda m: None)
+    assert "Yahoo" in msg
+
+
+def test_clean_key(monkeypatch):
+    monkeypatch.setenv("KOTAK_CONSUMER_KEY", '  "abcd1234wxyz9876"\n')
+    assert kotak.consumer_key() == "abcd1234wxyz9876" and kotak.masked_key() == "abcd…9876 (16 chars)"

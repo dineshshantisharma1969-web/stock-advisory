@@ -35,7 +35,7 @@ non-zero code if a step fails.
 
 ## Tests
 
-`python -m pytest` runs 99 tests that check the maths against independent values: Gordon-growth DCF,
+`python -m pytest` runs 107 tests that check the maths against independent values: Gordon-growth DCF,
 reverse-DCF round trip, put-call parity, a known bank EMI, hand-computed income tax, no-look-ahead
 backtest fills, tamper detection in the idea book, and the Supabase backend against a simulated API.
 
@@ -71,7 +71,16 @@ profiles, QR code) appears only after admin login; those pages also refuse clien
   in the latest backtest on live data; fundamental calls only for "Strong idea" stocks that pass the
   quality gate. Each call is tagged with the tracks it is for and stays in the tamper-evident record.
 
-## Zerodha Kite Connect (primary data source)
+## Kotak Neo Trade API (free daily data for Kotak Securities clients)
+
+1. Kotak Neo app or web -> **More** -> **Trade API** -> **Generate application** -> copy the token.
+2. Streamlit Secrets: `[kotak]` with `consumer_key = "..."`.
+Market data needs only this key: no daily TOTP/MPIN login. Kotak gives daily candles 180 days per request,
+so it **tops up** the saved 5-year history each day (one request per stock); the first 5-year history comes
+from Yahoo. F&O lot sizes also come from Kotak. Source order for prices: Kotak top-up -> Zerodha (if
+connected) -> Yahoo -> NSE bhavcopy.
+
+## Zerodha Kite Connect (optional)
 
 1. Subscribe at developers.kite.trade (₹500/month per API key) and create an app.
 2. Set its **Redirect URL** to this app's address (e.g. `https://<your-app>.streamlit.app/`).

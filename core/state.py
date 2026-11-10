@@ -152,9 +152,13 @@ def sidebar() -> bool:
                                         log=st.caption)
             st.success("Snapshot: " + ", ".join(f"{k} {v}" for k, v in done.items()))
         if is_admin() and not demo:
+            from . import kotak
+            st.caption(f"Kotak Neo: ✅ key {kotak.masked_key()}" if kotak.configured()
+                       else "Kotak Neo: not set up (add [kotak] consumer_key to Secrets)")
+        if is_admin() and not demo:
             from . import kite
             if not kite.configured():
-                st.caption("Zerodha: not set up (add [kite] api_key / api_secret to Secrets)")
+                st.caption("Zerodha: optional, not set up")
             else:
                 info = kite.session_info()
                 if info:
