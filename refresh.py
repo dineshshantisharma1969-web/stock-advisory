@@ -87,6 +87,9 @@ def main(argv=None) -> int:
         bt, _ = data.load_cache("backtest_live")
         done = snapshot.publish(cloud.client(), px, u, screen, bt, log=log.warning)
         log.info("Snapshot tables updated: %s", done)
+        from core import forward
+        placed = forward.run(cloud.client(), px)
+        log.info("Forward-test book: %d new trade(s) %s", len(placed), [r["symbol"] for r in placed])
 
     if failed:
         log.error("Finished with failures: %s", ", ".join(failed))

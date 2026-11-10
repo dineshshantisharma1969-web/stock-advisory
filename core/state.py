@@ -352,7 +352,15 @@ def prepare_for_claude():
             st.write("   " + ", ".join(f"{k}: {v}" for k, v in done.items()))
         except Exception as e:
             report_error("Snapshot", e)
-        st.write("3/3 Finished.")
+        st.write("3/3 Forward-test book (Momentum leaders)...")
+        try:
+            from . import forward
+            placed = forward.run(c, px)
+            st.write(f"   {len(placed)} new trade(s): " + ", ".join(r["symbol"] for r in placed) if placed else
+                     "   no new trades (no signal, breadth below 50%, or already holding)")
+        except Exception as e:
+            report_error("Forward-test book", e)
+        st.write("Finished.")
         box.update(label="Finished - tell Claude \"done\"", state="complete", expanded=True)
 
 

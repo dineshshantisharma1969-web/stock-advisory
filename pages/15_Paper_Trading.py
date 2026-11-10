@@ -7,8 +7,7 @@ from core import cloud, snapshot, state
 st.set_page_config(page_title="Paper Trading", page_icon="🎮", layout="wide")
 demo = state.sidebar()
 state.require_admin()
-state.hero("Paper trading: Claude's book", "₹20 lakh paper capital · max 5 trades a day · max 2% risk per trade · "
-           "fills and P&L computed from real prices.")
+state.hero("Paper trading", "₹20 lakh paper capital per book · fills and P&L computed from real prices.")
 
 c = cloud.client()
 if not c:
@@ -19,6 +18,20 @@ trades = pd.DataFrame(c.select("paper_trades", {"order": "id.asc"}))
 if trades.empty:
     st.info("No paper trades yet. Claude places them in Supabase before the session; results appear after the "
             "next refresh or 'Update snapshot'.")
+    st.stop()
+
+from core import forward
+BOOKS = {"claude": ("Main book (A-grade setups only)", 5, 0.02),
+         forward.BOOK: ("Forward test: Momentum leaders", forward.MAX_NEW, forward.RISK)}
+book = st.radio("Book", list(BOOKS), format_func=lambda b: BOOKS[b][0], horizontal=True)
+label, max_day, max_risk = BOOKS[book]
+st.caption(f"Rules: max {max_day} new trades a day · max {max_risk:.0%} risk per trade"
+           + (" · mechanical: trades are opened automatically from the strategy's signals" if book != "claude" else ""))
+trades = trades[trades["book"] == book] if "book" in trades else trades
+if trades.empty:
+    st.info("No trades in this book yet." + (" The forward test opens trades automatically when Momentum leaders "
+            "fires - its breadth filter keeps it in cash until at least 50% of stocks are above their 200 DMA."
+            if book != "claude" else ""))
     st.stop()
 
 # Recompute live from the loaded prices so the page is current even between snapshots
@@ -38,9 +51,9 @@ k[3].metric("Trades", f"{len(df)} ({len(opn)} open)")
 k[4].metric("Win rate", f"{(closed['net_pnl'] > 0).mean():.0%}" if len(closed) else "-")
 k[5].metric("Avg R (closed)", f"{closed['r_multiple'].mean():.2f}" if len(closed) else "-")
 
-breaches = snapshot.rule_checks(df)
+breaches = snapshot.rule_checks(df, max_per_day=max_day, max_risk=max_risk)
 (st.error("Rule breaches: " + "; ".join(breaches)) if breaches else st.success("All trades within the rules "
-                                                                                "(≤5 a day, ≤2% risk each)."))
+                                                                                f"(≤{max_day} a day, ≤{max_risk:.0%} risk each)."))
 
 if len(closed):
     closed = closed.assign(exit_date=pd.to_datetime(closed["exit_date"]))

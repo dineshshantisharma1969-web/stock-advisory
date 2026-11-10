@@ -268,6 +268,7 @@ def scan(prices: dict, setups: list[str] | None = None, lookback_days: int = 1,
                             3.0 if ex["mode"] == "trail" else ex["rr"])
                 rows.append({"date": dt.date(), "symbol": sym, "setup": name, "side": side, **lv,
                              "exit": "trailing" if ex["mode"] == "trail" else "fixed",
-                             "rsi": bar["rsi"], "adx": bar["adx"],
+                             "rsi": bar["rsi"], "adx": bar["adx"], "atr": bar["atr"],
+                             "rs_pct": bar.get("rs_pct", np.nan),
                              "risk_pct": abs(lv["entry"] - lv["stop"]) / lv["entry"]})
     return pd.DataFrame(rows)

@@ -35,7 +35,7 @@ non-zero code if a step fails.
 
 ## Tests
 
-`python -m pytest` runs 94 tests that check the maths against independent values: Gordon-growth DCF,
+`python -m pytest` runs 99 tests that check the maths against independent values: Gordon-growth DCF,
 reverse-DCF round trip, put-call parity, a known bank EMI, hand-computed income tax, no-look-ahead
 backtest fills, tamper detection in the idea book, and the Supabase backend against a simulated API.
 
@@ -48,6 +48,15 @@ Momentum leaders, MACD trend + regime and RS breakout exit on a **3x ATR trailin
 RSI pullback + regime keeps a 2x ATR stop and 2R target. All v2 strategies are long-only.
 Grade **A** now also requires a positive expectancy in the in-sample period, so a strategy that only
 looks good in the recent months is held at B.
+
+## Forward-test book (Momentum leaders)
+
+`core/forward.py` paper-trades one strategy mechanically in book `fwd-momentum`: each Prepare run (and
+`refresh.py`) takes the latest session's Momentum-leaders signals, strongest relative strength first, at most
+3 new trades a day, 1% risk (Rs 20,000) per trade, 3x ATR trailing stop, 60-session limit, entry at the next
+open, total exposure capped at 100% of the Rs 20 lakh book, no second position in a held stock. Trades are
+append-only and unique per book/day/stock, so re-running never duplicates them. Nothing from this book goes
+to clients; client calls stay A-grade only.
 
 ## Clients, tracks and publishing rules
 
