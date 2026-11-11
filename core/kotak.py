@@ -57,7 +57,10 @@ class KotakClient:
     def __init__(self, key: str, session=None):
         import requests
         self.s = session or requests.Session()
-        self.h = {"Authorization": key, "Content-Type": "application/x-www-form-urlencoded"}
+        # Same headers as Kotak's official SDK (neo_api_client 3.0.x rest client)
+        self.h = {"Authorization": key, "Content-Type": "application/x-www-form-urlencoded",
+                  "User-Agent": "NeoSDK-Python/3.0.13", "Accept": "application/json",
+                  "Accept-Encoding": "gzip, deflate"}
 
     def _get(self, url, params=None):
         r = self.s.get(url if url.startswith("http") else BASE + url, headers=self.h, params=params, timeout=30)
