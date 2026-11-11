@@ -63,11 +63,22 @@ class KotakClient:
         r = self.s.get(url if url.startswith("http") else BASE + url, headers=self.h, params=params, timeout=30)
         if r.status_code == 429:
             raise RuntimeError("Kotak rate limit reached (429) - try again in a few minutes")
-        if r.status_code in (401, 403):
-            raise PermissionError("Kotak rejected the consumer key - check [kotak] consumer_key in Secrets")
+        text = self._mask(r.text)
+        if r.status_code in (401, 403) or ("consumer key" in text.lower() and "invalid" in text.lower()):
+            raise PermissionError("Kotak rejected the consumer key - copy the CURRENT token from the Neo Trade API "
+                                  f"page into [kotak] consumer_key. Kotak said: {text[:160]}")
         if r.status_code != 200:
-            raise RuntimeError(f"Kotak {url} -> {r.status_code}: {r.text[:200]}")
+            raise RuntimeError(f"Kotak {url.split('?')[0][-60:]} -> {r.status_code}: {text[:200]}")
         return r
+
+    def _mask(self, text: str) -> str:
+        """Never show or store the key: Kotak echoes it back in its error messages."""
+        import re
+        key = self.h.get("Authorization") or ""
+        if len(key) > 8:
+            text = text.replace(key, f"{key[:4]}...{key[-4:]}")
+        return re.sub(r"([0-9a-fA-F]{4})[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{8}([0-9a-fA-F]{4})",
+                      r"\1...\2", text)
 
     def scrip_file(self, segment: str = "nse_cm") -> pd.DataFrame:
         paths = self._get(SCRIP_PATHS).json()["data"]["filesPaths"]

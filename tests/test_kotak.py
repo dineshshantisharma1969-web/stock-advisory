@@ -115,3 +115,14 @@ def test_refresh_uses_kotak_when_history_is_long(monkeypatch, tmp_path):
 def test_clean_key(monkeypatch):
     monkeypatch.setenv("KOTAK_CONSUMER_KEY", '  "abcd1234wxyz9876"\n')
     assert kotak.consumer_key() == "abcd1234wxyz9876" and kotak.masked_key() == "abcd…9876 (16 chars)"
+
+
+def test_rejected_key_is_masked_in_errors():
+    fake = "abcd1234-0000-4000-8000-00000000wxyz".replace("wxyz", "9f9f")
+
+    class S:
+        def get(self, *a, **k):
+            return R(424, {"error": True, "message": f"Consumer key '{fake}' is invalid. "})
+    with pytest.raises(PermissionError) as e:
+        kotak.KotakClient(fake, session=S()).scrip_file()
+    assert fake not in str(e.value) and "abcd...9f9f" in str(e.value)
