@@ -220,13 +220,6 @@ def publish(client, prices: dict, universe: pd.DataFrame, screen=None, backtest_
                 lots = kite.lot_sizes()
             except Exception as e:
                 log(f"Kite lot sizes failed, using NSE: {e}")
-        if not lots:
-            from . import kotak
-            if kotak.configured():
-                try:
-                    lots = kotak.lot_sizes()
-                except Exception as e:
-                    log(f"Kotak lot sizes failed, using NSE: {e}")
         lots = lots or nse.fetch_lot_sizes()
         if lots:
             client.insert("fo_lots", [{"symbol": k, "lot_size": v} for k, v in lots.items()], upsert_on="symbol")

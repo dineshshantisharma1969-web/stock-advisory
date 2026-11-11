@@ -95,23 +95,6 @@ def test_bad_key_message():
         kotak.KotakClient("bad", session=S()).scrip_file()
 
 
-def test_refresh_uses_kotak_when_history_is_long(monkeypatch, tmp_path):
-    monkeypatch.setattr(config, "CACHE_DIR", tmp_path)
-    monkeypatch.setenv("KOTAK_CONSUMER_KEY", "ck1")
-    from core import cloud
-    cloud.set_client(None)
-    long_hist = frame(pd.bdate_range(end="2026-11-06", periods=1250))
-    data.save_cache("prices_live", {"A": long_hist, "B": long_hist})
-    monkeypatch.setattr(kotak, "top_up", lambda old, syms, progress=None: (old, 2))
-    px, msg = data.refresh_prices(["A", "B"], log=lambda m: None)
-    assert "Kotak" in msg
-    # short history -> Kotak is skipped (it can only add 180 days); Yahoo provides the 5 years
-    data.save_cache("prices_live", {"A": frame(["2026-11-06"]), "B": frame(["2026-11-06"])})
-    monkeypatch.setattr(data.YahooProvider, "prices", lambda self, s, progress=None: {x: long_hist for x in s})
-    px, msg = data.refresh_prices(["A", "B"], log=lambda m: None)
-    assert "Yahoo" in msg
-
-
 def test_clean_key(monkeypatch):
     monkeypatch.setenv("KOTAK_CONSUMER_KEY", '  "abcd1234wxyz9876"\n')
     assert kotak.consumer_key() == "abcd1234wxyz9876" and kotak.masked_key() == "abcd…9876 (16 chars)"

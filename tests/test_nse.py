@@ -62,7 +62,7 @@ def test_refresh_prices_falls_back_to_nse(monkeypatch, tmp_path):
     frame = pd.DataFrame({"Open": 1.0, "High": 1.0, "Low": 1.0, "Close": 1.0, "Volume": 1}, index=idx)
     data.save_cache("prices_live", {"ABC": frame, "XYZ": frame})
     monkeypatch.setattr(data.YahooProvider, "prices", lambda self, s, progress=None: {})   # Yahoo blocked
-    monkeypatch.setattr(nse, "extend_prices", lambda old, s: ({**old}, [date(2026, 11, 6)]))
+    monkeypatch.setattr(nse, "extend_prices", lambda old, s, **kw: ({**old}, [date(2026, 11, 6)]))
     px, msg = data.refresh_prices(syms, log=lambda m: None)
     assert px is not None and "NSE" in msg
 
@@ -73,3 +73,47 @@ def test_refresh_prices_keeps_old_data_when_everything_fails(monkeypatch, tmp_pa
     monkeypatch.setattr(nse, "build_history", lambda s, progress=None: {})
     px, msg = data.refresh_prices(["ABC"], log=lambda m: None)
     assert px is None and "kept" in msg
+
+
+def _long(end="2026-11-10"):
+    idx = pd.bdate_range(end=end, periods=1250)
+    return pd.DataFrame({"Open": 1.0, "High": 1.0, "Low": 1.0, "Close": 1.0, "Volume": 1}, index=idx)
+
+
+def test_daily_refresh_uses_nse_when_weekly_refresh_is_recent(monkeypatch, tmp_path):
+    monkeypatch.setattr(config, "CACHE_DIR", tmp_path)
+    data.save_cache("prices_live", {"A": _long(), "B": _long()})
+    data.save_cache("prices_full_at", True)                       # Yahoo full refresh just done
+    called = {}
+    monkeypatch.setattr(data.YahooProvider, "prices", lambda self, s, progress=None: called.setdefault("yahoo", {}))
+    monkeypatch.setattr(nse, "extend_prices", lambda old, s, **kw: (old, [date(2026, 11, 11)]))
+    px, msg = data.refresh_prices(["A", "B"], log=lambda m: None, today=date(2026, 11, 11))
+    assert "NSE bhavcopy" in msg and "yahoo" not in called
+
+
+def test_weekly_full_refresh_goes_to_yahoo(monkeypatch, tmp_path):
+    monkeypatch.setattr(config, "CACHE_DIR", tmp_path)
+    data.save_cache("prices_live", {"A": _long(), "B": _long()})   # no prices_full_at -> weekly refresh due
+    monkeypatch.setattr(data.YahooProvider, "prices", lambda self, s, progress=None: {x: _long() for x in s})
+    px, msg = data.refresh_prices(["A", "B"], log=lambda m: None, today=date(2026, 11, 11))
+    assert "Yahoo" in msg and "weekly" in msg
+    assert data.cache_saved_at("prices_full_at") is not None
+
+
+def test_nse_not_published_yet_falls_back_to_yahoo(monkeypatch, tmp_path):
+    monkeypatch.setattr(config, "CACHE_DIR", tmp_path)
+    data.save_cache("prices_live", {"A": _long(), "B": _long()})
+    data.save_cache("prices_full_at", True)
+    monkeypatch.setattr(nse, "extend_prices", lambda old, s, **kw: (old, []))   # nothing new yet
+    monkeypatch.setattr(data.YahooProvider, "prices", lambda self, s, progress=None: {x: _long("2026-11-11") for x in s})
+    px, msg = data.refresh_prices(["A", "B"], log=lambda m: None, today=date(2026, 11, 11))
+    assert "Yahoo" in msg
+
+
+def test_up_to_date_on_weekend(monkeypatch, tmp_path):
+    monkeypatch.setattr(config, "CACHE_DIR", tmp_path)
+    data.save_cache("prices_live", {"A": _long("2026-11-13"), "B": _long("2026-11-13")})
+    data.save_cache("prices_full_at", True)
+    monkeypatch.setattr(nse, "extend_prices", lambda old, s, **kw: (old, []))
+    px, msg = data.refresh_prices(["A", "B"], log=lambda m: None, today=date(2026, 11, 14))   # Saturday
+    assert "up to date" in msg and px is not None

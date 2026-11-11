@@ -35,7 +35,7 @@ non-zero code if a step fails.
 
 ## Tests
 
-`python -m pytest` runs 107 tests that check the maths against independent values: Gordon-growth DCF,
+`python -m pytest` runs 111 tests that check the maths against independent values: Gordon-growth DCF,
 reverse-DCF round trip, put-call parity, a known bank EMI, hand-computed income tax, no-look-ahead
 backtest fills, tamper detection in the idea book, and the Supabase backend against a simulated API.
 
@@ -71,7 +71,14 @@ profiles, QR code) appears only after admin login; those pages also refuse clien
   in the latest backtest on live data; fundamental calls only for "Strong idea" stocks that pass the
   quality gate. Each call is tagged with the tracks it is for and stays in the tamper-evident record.
 
-## Kotak Neo Trade API (free daily data for Kotak Securities clients)
+## Price sources (current)
+
+Daily: **NSE bhavcopy** (official exchange file, free, no key) adds the missing sessions to the saved
+5-year history. Weekly (or when nothing is saved): **Yahoo Finance** full 5-year, split/bonus-adjusted
+history. Zerodha Kite is used first if connected. Fundamentals refresh from Yahoo when older than 7 days.
+Kotak Neo is not used for now (its API rejected requests from the cloud server).
+
+## Kotak Neo Trade API (optional, currently not used)
 
 1. Kotak Neo app or web -> **More** -> **Trade API** -> **Generate application** -> copy the token.
 2. Streamlit Secrets: `[kotak]` with `consumer_key = "..."`.

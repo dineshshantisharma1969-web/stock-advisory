@@ -13,7 +13,7 @@ from __future__ import annotations
 import hashlib
 import pickle
 import time
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 import numpy as np
 import pandas as pd
@@ -331,42 +331,65 @@ def merge_refresh(old: dict | None, new: dict, ok=lambda v: True) -> tuple[dict,
     return {**(old or {}), **good}, len(good)
 
 
-def refresh_prices(symbols: list[str], progress=None, log=print) -> tuple[dict | None, str]:
-    """Yahoo first; if Yahoo refuses most stocks, fall back to NSE bhavcopies. Returns (prices or None, message)."""
-    from . import kite, kotak, nse
+FULL_REFRESH_DAYS = 7   # re-download the split/bonus-adjusted 5-year history from Yahoo at least weekly
+
+
+def _yahoo_full(symbols, progress, log):
+    try:
+        return YahooProvider().prices(symbols, progress=progress)
+    except Exception as e:
+        log(f"Yahoo prices failed: {e}")
+        return {}
+
+
+def refresh_prices(symbols: list[str], progress=None, log=print, today=None) -> tuple[dict | None, str]:
+    """Price sources, in order:
+    1. NSE bhavcopy (official, free, no key): adds the missing days to the saved 5-year history.
+    2. Yahoo Finance: full 5-year, split/bonus-adjusted history - when nothing is saved yet, at least weekly
+       (bhavcopy prices are unadjusted), or when NSE fails.
+    3. Zerodha Kite, if connected, before Yahoo.
+    Returns (prices or None, message). A failed refresh never replaces good data (None)."""
+    from . import kite, nse
     need = 0.8 * len(symbols)
-    if kotak.configured():
-        # Kotak: free, one request per stock tops up the saved 5-year history (first history comes from Yahoo)
+    today = today or date.today()
+    old, _ = load_cache("prices_live")
+    years = max((len(df) for df in (old or {}).values()), default=0) / 250
+    full_at = cache_saved_at("prices_full_at")
+    weekly_due = full_at is None or datetime.now() - full_at > timedelta(days=FULL_REFRESH_DAYS)
+    have_history = bool(old) and len(old) >= need and years >= config.HISTORY_YEARS - 0.5
+
+    if have_history and not weekly_due:
         try:
-            old, _ = load_cache("prices_live")
-            years = max((len(df) for df in (old or {}).values()), default=0) / 250
-            if old and len(old) >= need and years >= config.HISTORY_YEARS - 0.5:
-                merged, n = kotak.top_up(old, symbols, progress=progress)
-                if n >= need:
-                    return merged, f"Prices updated for {n} stocks from Kotak Neo (history kept, latest days added)."
-                log(f"Kotak updated only {n} of {len(symbols)}; trying the next source")
+            merged, added = nse.extend_prices(old, symbols, today=today)
+            if added:
+                return merged, (f"Prices updated from NSE bhavcopy (official): added {len(added)} trading day(s), "
+                                f"latest {added[-1]:%d %b %Y}.")
+            last = max(df.index.max() for df in old.values() if len(df)).date()
+            if last >= today or today.weekday() >= 5:
+                return old, f"Prices already up to date (latest {last:%d %b %Y})."
+            log("NSE has not published today's file yet; trying Yahoo for today's prices")
         except Exception as e:
-            log(f"Kotak prices failed: {e}; trying the next source")
+            log(f"NSE bhavcopy failed: {e}; trying Yahoo")
+
     if kite.configured() and kite.session_info():
         try:
             px = kite.prices(symbols, progress=progress)
             if len(px) >= need:
-                return px, f"Prices updated for {len(px)} stocks from Zerodha Kite."
+                save_cache("prices_full_at", True)
+                return px, f"Prices updated for {len(px)} stocks from Zerodha Kite (5-year history)."
             log(f"Kite returned only {len(px)} of {len(symbols)}; trying Yahoo")
         except Exception as e:
             log(f"Kite prices failed: {e}; trying Yahoo")
-    try:
-        px = YahooProvider().prices(symbols, progress=progress)
-    except Exception as e:
-        log(f"Yahoo prices failed: {e}")
-        px = {}
+
+    px = _yahoo_full(symbols, progress, log)
     if len(px) >= need:
-        return px, f"Prices updated for {len(px)} stocks from Yahoo Finance."
+        save_cache("prices_full_at", True)
+        why = "weekly full refresh" if have_history else "5-year history"
+        return px, f"Prices updated for {len(px)} stocks from Yahoo Finance ({why}, adjusted for splits/bonuses)."
     log(f"Yahoo returned only {len(px)} of {len(symbols)}; trying NSE bhavcopy")
-    old, _ = load_cache("prices_live")
     try:
         if old and len(old) >= need:
-            merged, added = nse.extend_prices(old, symbols)
+            merged, added = nse.extend_prices(old, symbols, today=today)
             if added:
                 return merged, (f"Yahoo was unavailable; added {len(added)} trading day(s) from NSE bhavcopy "
                                 f"(latest {added[-1]:%d %b %Y}).")

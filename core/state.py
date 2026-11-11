@@ -1,7 +1,7 @@
 """Shared Streamlit state: data-mode switch, cached loaders, refresh, common chart helpers."""
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import pandas as pd
 import plotly.graph_objects as go
@@ -152,9 +152,7 @@ def sidebar() -> bool:
                                         log=st.caption)
             st.success("Snapshot: " + ", ".join(f"{k} {v}" for k, v in done.items()))
         if is_admin() and not demo:
-            from . import kotak
-            st.caption(f"Kotak Neo: ✅ key {kotak.masked_key()}" if kotak.configured()
-                       else "Kotak Neo: not set up (add [kotak] consumer_key to Secrets)")
+            st.caption("Prices: NSE bhavcopy daily (official) · Yahoo weekly full refresh")
         if is_admin() and not demo:
             from . import kite
             if not kite.configured():
@@ -194,7 +192,11 @@ def refresh_live(fundamentals: bool = True):
             st.error(msg + " Try again later.")
             return
         data.save_cache("prices_live", px)
-        if fundamentals:
+        fund_at = data.cache_saved_at("fund_live")
+        fund_fresh = fund_at is not None and datetime.now() - fund_at < timedelta(days=7)
+        if fundamentals and fund_fresh:
+            msg += f" Fundamentals are fresh (updated {fund_at:%d %b}); next update after 7 days."
+        if fundamentals and not fund_fresh:
             fu = yp.all_fundamentals(syms, prices=px,
                                      progress=lambda f: bar.progress(f, text=f"Fundamentals {f:.0%} (slow)"))
             old, _ = data.load_cache("fund_live")
