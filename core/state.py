@@ -186,7 +186,9 @@ def refresh_live(fundamentals: bool = True):
     bar = st.progress(0.0, text="Downloading prices for Nifty 500...")
     syms = list(u["symbol"])
     try:
-        px, msg = data.refresh_prices(syms, progress=lambda f: bar.progress(f, text=f"Prices {f:.0%}"))
+        px, msg = data.refresh_prices(syms, progress=lambda f: bar.progress(f, text=f"Prices {f:.0%}"),
+                                      log=lambda m: data_note("Refresh live data", m))
+        data_note("Refresh result", msg)
         if px is None:
             # Never overwrite good data with a refresh that failed
             st.error(msg + " Try again later.")
@@ -282,6 +284,19 @@ def publish_block_reason(kind: str, grade: str | None = None, verdict: str | Non
     return None
 
 
+def data_note(step: str, message: str):
+    """Show a data-source note and record it in app_errors (step 'Data note: ...') so it can be reviewed later."""
+    st.caption(message)
+    try:
+        from . import cloud
+        c = cloud.client()
+        if c:
+            c.insert("app_errors", [{"step": f"Data note: {step}", "error": str(message)[:2000], "traceback": "",
+                                     "versions": config.APP_VERSION}])
+    except Exception:
+        pass
+
+
 def report_error(step: str, exc: Exception):
     """Show the error and also save the full traceback to Supabase (table app_errors) for diagnosis."""
     import platform
@@ -323,7 +338,8 @@ def prepare_for_claude():
                        "(1-3 minutes)...", expanded=True) as pre:
             try:
                 bar0 = st.progress(0.0)
-                new_px, msg = data.refresh_prices(list(load_universe()["symbol"]), progress=bar0.progress)
+                new_px, msg = data.refresh_prices(list(load_universe()["symbol"]), progress=bar0.progress,
+                                                  log=lambda m: data_note("Prepare: price history", m))
                 if new_px is not None:
                     data.save_cache("prices_live", new_px)
                     st.cache_data.clear()

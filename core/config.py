@@ -1,7 +1,7 @@
 """Central settings. Edit these numbers to match your own assumptions."""
 from pathlib import Path
 
-APP_VERSION = "2026-11-11 v16"  # bump on each release; shown in the sidebar
+APP_VERSION = "2026-11-12 v17"  # bump on each release; shown in the sidebar
 HISTORY_YEARS = 5   # price history used for indicators and backtests
 
 ROOT = Path(__file__).resolve().parent.parent
