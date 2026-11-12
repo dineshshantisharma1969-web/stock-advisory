@@ -168,7 +168,10 @@ def sidebar() -> bool:
                                    help="Opens Zerodha's login page. After login you come back here automatically.")
         if is_admin() and st.button("Test Supabase connection", width="stretch"):
             ok, msg = cloud.diagnose()
-            (st.success if ok else st.error)(msg)
+            if ok:
+                st.success(msg)
+            else:
+                st.error(msg)
         saved = data.cache_saved_at("prices_live")
         st.caption(f"Live prices cached: {saved:%d %b %Y %H:%M}" if saved else "No live data downloaded yet")
         if not demo and is_admin() and st.button("Refresh live data", width="stretch"):

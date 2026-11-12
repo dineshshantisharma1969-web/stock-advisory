@@ -15,8 +15,12 @@ tab_i, tab_j = st.tabs(["Published ideas (auto-tracked)", "My trades journal (F&
 
 with tab_i:
     ok, msg = ledger.verify_chain()
-    (st.success if ok else st.error)(f"Integrity: {msg}. Ideas are append-only and hash-chained; "
-                                     "past calls cannot be edited or deleted.")
+    _note = (f"Integrity: {msg}. Ideas are append-only and hash-chained; "
+             "past calls cannot be edited or deleted.")
+    if ok:
+        st.success(_note)
+    else:
+        st.error(_note)
     ib = ledger.ideas()
     if ib.empty:
         st.info("No ideas published yet.")

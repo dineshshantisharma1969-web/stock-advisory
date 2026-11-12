@@ -90,6 +90,9 @@ if len(ib):
     k[2].metric("Hit rate", state.pct(closed["ret"].gt(0).mean()) if len(closed) else "-")
     k[3].metric("Avg return / idea", state.pct(closed["ret"].mean()) if len(closed) else "-")
     ok, msg = ledger.verify_chain()
-    (st.success if ok else st.error)(f"Integrity check: {msg}")
+    if ok:
+        st.success(f"Integrity check: {msg}")
+    else:
+        st.error(f"Integrity check: {msg}")
 else:
     st.write("No ideas published yet. Publish from the Fundamental or Trading pages to start a verifiable track record.")

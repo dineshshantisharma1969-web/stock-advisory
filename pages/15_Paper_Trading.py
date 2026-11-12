@@ -52,8 +52,10 @@ k[4].metric("Win rate", f"{(closed['net_pnl'] > 0).mean():.0%}" if len(closed) e
 k[5].metric("Avg R (closed)", f"{closed['r_multiple'].mean():.2f}" if len(closed) else "-")
 
 breaches = snapshot.rule_checks(df, max_per_day=max_day, max_risk=max_risk)
-(st.error("Rule breaches: " + "; ".join(breaches)) if breaches else st.success("All trades within the rules "
-                                                                                f"(≤{max_day} a day, ≤{max_risk:.0%} risk each)."))
+if breaches:
+    st.error("Rule breaches: " + "; ".join(breaches))
+else:
+    st.success(f"All trades within the rules (≤{max_day} a day, ≤{max_risk:.0%} risk each).")
 
 if len(closed):
     closed = closed.assign(exit_date=pd.to_datetime(closed["exit_date"]))
