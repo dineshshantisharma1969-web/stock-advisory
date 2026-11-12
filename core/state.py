@@ -378,7 +378,7 @@ def prepare_for_claude():
             st.write("   " + ", ".join(f"{k}: {v}" for k, v in done.items()))
         except Exception as e:
             report_error("Snapshot", e)
-        st.write("3/3 Forward-test book (Momentum leaders)...")
+        st.write("3/3 Forward-test books: Momentum leaders...")
         try:
             from . import forward
             placed = forward.run(c, px)
@@ -386,6 +386,23 @@ def prepare_for_claude():
                      "   no new trades (no signal, breadth below 50%, or already holding)")
         except Exception as e:
             report_error("Forward-test book", e)
+        st.write("   Pullback book (dips in uptrending F&O stocks)...")
+        try:
+            from . import forward
+            placed = forward.run_dip(c, px)
+            st.write(f"   {len(placed)} new trade(s): " + ", ".join(r["symbol"] for r in placed) if placed else
+                     "   no new trades (no stock is in a sharp dip above its 200 DMA, or already holding)")
+        except Exception as e:
+            report_error("Pullback forward-test book", e)
+        st.write("   Nifty weekly condor book (real option prices from NSE)...")
+        try:
+            from . import income
+            res = income.step(c, log=lambda m: (st.write("   " + m), data_note("Condor book", m)))
+            bits = [f"opened {income.describe(t)} for {t['expiry']} (credit {t['credit']:.0f} pts)" for t in res["opened"]]
+            bits += [f"{t['expiry']} {t['status']}: {t['pnl_points']:+.0f} pts" for t in res["closed"]]
+            st.write("   " + ("; ".join(bits) if bits else f"nothing new ({res['open']} open)"))
+        except Exception as e:
+            report_error("Nifty condor book (NSE F&O file)", e)
         st.write("Finished.")
         box.update(label="Finished - tell Claude \"done\"", state="complete", expanded=True)
 

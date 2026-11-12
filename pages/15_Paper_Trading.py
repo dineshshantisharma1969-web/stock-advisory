@@ -14,31 +14,65 @@ if not c:
     st.info("Paper trading needs Supabase (the trades and results live there).")
     st.stop()
 
+from core import forward, income
+BOOKS = {"claude": ("Main book (A-grade setups only)", 5, 0.02),
+         forward.BOOK: ("Forward test: Momentum leaders", forward.MAX_NEW, forward.RISK),
+         forward.DIP_BOOK: ("Forward test: Pullbacks (F&O stocks)", forward.MAX_NEW, forward.RISK),
+         income.BOOK: ("Forward test: Nifty weekly condor", 1, 0.02)}
+book = st.radio("Book", list(BOOKS), format_func=lambda b: BOOKS[b][0], horizontal=True)
+label, max_day, max_risk = BOOKS[book]
+
+if book == income.BOOK:
+    st.caption("Rules: one hedged condor a week, one lot · sold strikes 0.75 expected moves from Nifty · closed if "
+               "Nifty ends a day at or beyond a sold strike, else held to expiry · every price is NSE's closing "
+               "price, 1 point cost per leg.")
+    ct = pd.DataFrame(c.select("condor_trades", {"order": "expiry.asc"}))
+    if ct.empty:
+        st.info("No condor yet. The first one is opened by 'Prepare data for Claude' on the evening of the first "
+                "session after a weekly expiry (normally Wednesday).")
+        st.stop()
+    done = ct[ct["status"] != "open"]
+    live = ct[ct["status"] == "open"]
+    realised = done["pnl_rupees"].sum() if len(done) else 0.0
+    unreal = (live["open_pnl_points"].fillna(0) * live["lot_size"]).sum() if len(live) else 0.0
+    k = st.columns(5)
+    k[0].metric("Equity", f"₹{snapshot.CAPITAL + realised + unreal:,.0f}",
+                f"{(realised + unreal) / snapshot.CAPITAL:+.2%}")
+    k[1].metric("Realised P&L", f"₹{realised:,.0f}")
+    k[2].metric("Open P&L", f"₹{unreal:,.0f}")
+    k[3].metric("Weeks", f"{len(ct)} ({len(live)} open)")
+    k[4].metric("Weeks in profit", f"{(done['pnl_points'] > 0).mean():.0%}" if len(done) else "-")
+    N = st.column_config.NumberColumn
+    st.dataframe(ct[["entry_date", "expiry", "spot", "vix", "sell_put", "buy_put", "sell_call", "buy_call", "credit",
+                     "max_loss", "status", "open_pnl_points", "exit_date", "exit_spot", "pnl_points", "pnl_rupees",
+                     "r_multiple"]].iloc[::-1], hide_index=True, width="stretch",
+                 column_config={"credit": N("Credit (pts)", format="%.1f"), "max_loss": N("Max loss (pts)", format="%.1f"),
+                                "pnl_rupees": N("P&L ₹", format="%.0f"), "r_multiple": N("R", format="%.2f"),
+                                "open_pnl_points": N("Open P&L (pts)", format="%.1f")})
+    st.caption("Research result this is testing (5 years of NSE prices): 64% of weeks profitable, profit factor "
+               "about 1.4. Thin and partly luck - which is why it is a paper test and not a client call.")
+    st.stop()
 trades = pd.DataFrame(c.select("paper_trades", {"order": "id.asc"}))
 if trades.empty:
     st.info("No paper trades yet. Claude places them in Supabase before the session; results appear after the "
             "next refresh or 'Update snapshot'.")
     st.stop()
 
-from core import forward
-BOOKS = {"claude": ("Main book (A-grade setups only)", 5, 0.02),
-         forward.BOOK: ("Forward test: Momentum leaders", forward.MAX_NEW, forward.RISK)}
-book = st.radio("Book", list(BOOKS), format_func=lambda b: BOOKS[b][0], horizontal=True)
-label, max_day, max_risk = BOOKS[book]
 st.caption(f"Rules: max {max_day} new trades a day · max {max_risk:.0%} risk per trade"
            + (" · mechanical: trades are opened automatically from the strategy's signals" if book != "claude" else ""))
 trades = trades[trades["book"] == book] if "book" in trades else trades
 if trades.empty:
-    st.info("No trades in this book yet." + (" The forward test opens trades automatically when Momentum leaders "
-            "fires - its breadth filter keeps it in cash until at least 50% of stocks are above their 200 DMA."
-            if book != "claude" else ""))
+    why = {forward.BOOK: " Momentum leaders stays in cash until at least 50% of stocks are above their 200 DMA.",
+           forward.DIP_BOOK: " The pullback book opens a trade when an F&O stock above its 200 DMA has a sharp "
+                             "2-3 day dip; it is checked each time you run 'Prepare data for Claude'."}
+    st.info("No trades in this book yet." + why.get(book, ""))
     st.stop()
 
 # Recompute live from the loaded prices so the page is current even between snapshots
 res = pd.DataFrame(snapshot.evaluate_paper(trades.to_dict("records"), state.load_prices(False)))
 df = trades.merge(res, left_on="id", right_on="trade_id", how="left")
 df["risk"] = (df["entry"] - df["stop"]).abs() * df["qty"]
-closed = df[df["status"].isin(["target", "stop", "trail stop", "expired"])]
+closed = df[df["status"].isin(["target", "stop", "trail stop", "expired", "exit signal"])]
 opn = df[df["status"] == "open"]
 
 realised, unreal = closed["net_pnl"].sum(), opn["net_pnl"].sum()

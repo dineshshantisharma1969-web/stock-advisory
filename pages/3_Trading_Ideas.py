@@ -1,5 +1,4 @@
 import numpy as np
-import plotly.graph_objects as go
 import streamlit as st
 
 from core import fno, ledger, market, state, technicals
@@ -65,7 +64,9 @@ with left:
 with right:
     st.metric("Entry / Stop / Target", f"{r['entry']:.1f} / {r['stop']:.1f} / {r['target']:.1f}")
     st.write(f"Backtest grade: **{r['grade']}** · Regime: **{r['with_regime']}**")
-    instrument = st.radio("Instrument", ["Cash (swing)", "Stock future", "Option spread"], horizontal=True)
+    instrument = st.radio("Instrument", ["Stock future", "Cash (swing)"], horizontal=True,
+                          help="Stock option spreads are no longer offered: on 5 years of real NSE option prices "
+                               "both debit and credit spreads on stock signals lost money after costs.")
     lot = int(r["fno_lot"]) if r["fno_lot"] == r["fno_lot"] and r["fno_lot"] else 0
     if instrument != "Cash (swing)":
         lot = st.number_input("Lot size (check NSE)", 1, 100000, lot or 1)
@@ -81,24 +82,8 @@ with right:
         lots_n = max(int(capital * risk_pct / (per_share * lot)), 0)
         st.write(f"Lots: **{lots_n}** · risk per lot ₹{per_share * lot:,.0f}")
         if lots_n == 0:
-            st.error("One lot risks more than your per-trade limit. Use an option spread or skip.")
+            st.error("One lot risks more than your per-trade limit. Trade it in cash with fewer shares, or skip.")
         desc = f"Future x{lots_n} lot(s)"
-    else:
-        hv = fno.historical_vol(px[r["symbol"]]["Close"])
-        iv = st.slider("Implied vol (enter from option chain)", 0.10, 1.0, float(round(hv, 2)), 0.01,
-                       help=f"30-day historical vol is {hv:.0%}")
-        dte = st.slider("Days to expiry", 5, 60, 25)
-        s = fno.suggest_structure(r["side"], r["entry"], r["target"], r["stop"], iv, dte, lot)
-        legs = " / ".join(f"{'Buy' if l['side'] > 0 else 'Sell'} {l['strike']:.0f} {l['type']} @ {l['premium']:.1f}" for l in s["legs"])
-        st.write(f"**{s['name']}**: {legs}")
-        st.write(f"Max loss ₹{s['max_loss']:,.0f} · Max profit ₹{s['max_profit']:,.0f} · "
-                 f"Breakeven {s['breakeven']:.1f} · R:R {s['reward_risk']:.2f}")
-        spots = np.linspace(r["entry"] * 0.85, r["entry"] * 1.15, 200)
-        pf = go.Figure(go.Scatter(x=spots, y=fno.payoff(s["legs"], spots), fill="tozeroy"))
-        pf.update_layout(height=250, margin=dict(l=10, r=10, t=10, b=10), xaxis_title="Spot at expiry", yaxis_title="P&L ₹")
-        st.plotly_chart(pf, width="stretch")
-        st.caption(s["note"])
-        desc = s["name"] + ": " + legs
     if not state.is_admin():
         st.stop()
     with st.form("pub_t"):
@@ -107,8 +92,6 @@ with right:
         default_track = "swing" if instrument == "Cash (swing)" else "fno"
         tracks = st.multiselect("Publish to client tracks", list(ledger.TRACKS), [default_track],
                                 format_func=ledger.TRACKS.get)
-        if "fno" in tracks and instrument == "Stock future":
-            st.caption("Tip: F&O-track clients are best served with the defined-risk option spread.")
         block = state.publish_block_reason("swing" if instrument == "Cash (swing)" else "fno", r["grade"], demo=demo)
         if block:
             st.caption("🔒 " + block)

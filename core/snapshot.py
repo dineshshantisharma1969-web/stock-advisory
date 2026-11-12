@@ -13,6 +13,8 @@ Paper fill rules (same spirit as the backtest):
   entry_type 'open'  -> filled at the open of the first session on/after trade_date
   entry_type 'limit' -> day order: filled only if that session trades through the limit
                         (long: low <= limit, fill = min(open, limit); short: high >= limit, fill = max(open, limit))
+  exit_rule 'sma5' (pullback book): no target; leave at the next open after the first close above the
+         5-day average; the stop and the horizon still apply.
   exits: stop or target touched; if one bar touches both, the STOP counts; a gap through the stop
          fills at the open; otherwise closed at the close of the horizon_days-th session.
   costs: 0.1% of turnover per side.
@@ -129,11 +131,18 @@ def evaluate_trade(t: dict, px: pd.DataFrame | None) -> dict:
     trail = t.get("trail_atr")
     trail = float(trail) if trail is not None and not (isinstance(trail, float) and math.isnan(trail)) else None
     atr = technicals.atr(px).reindex(bars.index) if trail else None
+    # exit_rule 'sma5': leave at the next open after the first close above the 5-day average (no target)
+    rule = t.get("exit_rule") if isinstance(t.get("exit_rule"), str) else None
+    sma5 = px["Close"].rolling(5).mean().reindex(bars.index) if rule == "sma5" else None
+    leave = False
     best = fill
     status, exit_px, exit_d = "open", float(bars["Close"].iloc[min(len(bars), horizon) - 1]), None
     for j, (d, bar) in enumerate(bars.head(horizon).iterrows()):
+        if leave:
+            status, exit_px, exit_d = "exit signal", float(bar["Open"]), d
+            break
         hit_stop = bar["Low"] <= stop if side > 0 else bar["High"] >= stop
-        hit_tgt = (not trail) and (bar["High"] >= target if side > 0 else bar["Low"] <= target)
+        hit_tgt = (not trail) and (not rule) and (bar["High"] >= target if side > 0 else bar["Low"] <= target)
         if hit_stop:
             gap = (bar["Open"] < stop) if side > 0 else (bar["Open"] > stop)
             status = "trail stop" if trail and stop != init_stop else "stop"
@@ -142,6 +151,8 @@ def evaluate_trade(t: dict, px: pd.DataFrame | None) -> dict:
         if hit_tgt:
             status, exit_px, exit_d = "target", target, d
             break
+        if sma5 is not None and pd.notna(sma5.iloc[j]):
+            leave = (bar["Close"] > sma5.iloc[j]) if side > 0 else (bar["Close"] < sma5.iloc[j])
         if trail and pd.notna(atr.iloc[j]):   # ratchet behind the best close, effective from the next bar
             if side > 0:
                 best = max(best, float(bar["Close"]))
