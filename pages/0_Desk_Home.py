@@ -23,6 +23,31 @@ if not demo:
         else:
             run()
 
+if not demo:
+    from core import cloud, live
+    _c = cloud.client()
+    if _c:
+        try:
+            _st = live.status(_c)
+            tone, line = live.describe_status(_st)
+            with st.expander(("🟢 " if tone == "ok" else "⚪ ") + "Kotak live prices (office PC relay)", expanded=False):
+                st.write(line)
+                if _st.get("relay_ip"):
+                    st.caption(f"Relay connects from internet address {_st['relay_ip']}.")
+                with st.form("relay_pw"):
+                    pw = st.text_input("Set relay passphrase (type the same phrase in relay_settings.ini on the PC)",
+                                       type="password")
+                    if st.form_submit_button("Save passphrase"):
+                        try:
+                            live.set_passphrase(_c, pw)
+                            st.success("Saved. The office PC must use this exact phrase.")
+                        except ValueError as e:
+                            st.error(str(e))
+                st.caption("Setup guide: relay/README.md in the app's GitHub folder. The relay only reads prices; "
+                           "it never logs in to Kotak or places orders.")
+        except Exception as e:
+            state.report_error("Kotak live prices panel", e)
+
 px = state.load_prices(demo)
 if state.need_data(px):
     st.stop()

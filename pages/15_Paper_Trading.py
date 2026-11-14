@@ -75,6 +75,18 @@ df["risk"] = (df["entry"] - df["stop"]).abs() * df["qty"]
 closed = df[df["status"].isin(["target", "stop", "trail stop", "expired", "exit signal"])]
 opn = df[df["status"] == "open"]
 
+# Live prices from the Kotak relay (office PC), when it is running
+from core import live as _live
+try:
+    _lp = _live.live_pnl(df, _live.quotes(c))
+except Exception:
+    _lp = pd.DataFrame()
+if len(_lp):
+    df.loc[_lp.index, "net_pnl"] = _lp["live_pnl"]
+    df.loc[_lp.index, "exit"] = _lp["live"]
+    opn = df[df["status"] == "open"]
+    _t = _lp["live_time"].max().tz_convert(_live.IST)
+    st.success(f"🟢 Open positions marked to Kotak live prices ({_t:%H:%M}).")
 realised, unreal = closed["net_pnl"].sum(), opn["net_pnl"].sum()
 equity = snapshot.CAPITAL + realised + unreal
 k = st.columns(6)
