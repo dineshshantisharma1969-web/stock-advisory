@@ -72,3 +72,23 @@ def live_pnl(trades: pd.DataFrame, q: pd.DataFrame, cost_per_side: float = 0.001
     o["live_pnl"] = (o["live"] - o["fill"]) * o["qty"] * side - cost_per_side * o["fill"] * o["qty"]
     o["live_time"] = o["symbol"].map(q["updated_at"])
     return o
+
+
+def latest(client) -> pd.DataFrame:
+    """Every quote the relay has saved (any age), indexed by symbol, with updated_at as a timestamp."""
+    df = pd.DataFrame(client.select("live_quotes"))
+    if df.empty:
+        return df
+    df["updated_at"] = pd.to_datetime(df["updated_at"], utc=True, errors="coerce")
+    return df.set_index("symbol").sort_index()
+
+
+def ticker_symbols(client, extra: tuple = ("NIFTY 50", "NIFTY BANK")) -> list[str]:
+    """Indices first, then stocks in the paper books (newest first, no duplicates)."""
+    trades = client.select("paper_trades", {"order": "id.desc", "select": "symbol"})
+    seen, out = set(), []
+    for s in list(extra) + [t["symbol"] for t in trades]:
+        if s not in seen:
+            seen.add(s)
+            out.append(s)
+    return out

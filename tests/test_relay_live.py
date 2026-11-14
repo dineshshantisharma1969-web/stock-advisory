@@ -134,3 +134,10 @@ def test_scrip_file_is_downloaded_without_the_kotak_key(monkeypatch):
     assert tok == {"RELIANCE": "2885", "HDFCBANK": "1333"}
     file_call = [h for u, h in seen if u.endswith("nse_cm-v1.csv")][0]
     assert "Authorization" not in file_call                      # the key never goes to the file store
+
+
+def test_ticker_puts_indices_first_then_paper_stocks_once():
+    class C:
+        def select(self, table, params=None):
+            return [{"symbol": "GLAND"}, {"symbol": "LAURUSLABS"}, {"symbol": "GLAND"}]
+    assert live.ticker_symbols(C()) == ["NIFTY 50", "NIFTY BANK", "GLAND", "LAURUSLABS"]

@@ -28,6 +28,26 @@ if not demo:
     _c = cloud.client()
     if _c:
         try:
+            _q = live.latest(_c)
+            if len(_q):
+                _when = _q["updated_at"].max().tz_convert(live.IST)
+                _fresh = (pd.Timestamp.now(tz="UTC") - _q["updated_at"].max()).total_seconds() < 600
+                st.markdown(f"#### {'🟢' if _fresh else '⚪'} Kotak prices · {_when:%d %b %H:%M}"
+                            + ("" if _fresh else " (last update - relay not running now)"))
+                _syms = [x for x in live.ticker_symbols(_c) if x in _q.index][:8]
+                for _row in range(0, len(_syms), 4):
+                    _cols = st.columns(4)
+                    for _col, _s in zip(_cols, _syms[_row:_row + 4]):
+                        _r = _q.loc[_s]
+                        _ch = _r.get("change_pct")
+                        _col.metric(_s, f"{_r['ltp']:,.2f}", f"{_ch:+.2f}%" if pd.notna(_ch) else None)
+                with st.expander(f"All Kotak prices ({len(_q)} stocks)"):
+                    _f = st.text_input("Search symbol", key="live_search").strip().upper()
+                    _v = _q[_q.index.str.contains(_f, regex=False)] if _f else _q
+                    st.dataframe(_v[["ltp", "change_pct", "open", "high", "low", "volume"]], width="stretch",
+                                 column_config={"ltp": st.column_config.NumberColumn("Price", format="%.2f"),
+                                                "change_pct": st.column_config.NumberColumn("Change %", format="%.2f"),
+                                                "volume": st.column_config.NumberColumn(format="%.0f")})
             _st = live.status(_c)
             tone, line = live.describe_status(_st)
             with st.expander(("🟢 " if tone == "ok" else "⚪ ") + "Kotak live prices (office PC relay)", expanded=False):
