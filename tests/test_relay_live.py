@@ -117,3 +117,20 @@ def test_settings_accept_percent_and_symbols(tmp_path, monkeypatch):
     monkeypatch.setattr(relay, "SETTINGS", ini)
     s = relay.settings()
     assert s["passphrase"] == "My%$pass#word 100%!" and s["url"] == "https://x.supabase.co"
+
+
+def test_scrip_file_is_downloaded_without_the_kotak_key(monkeypatch):
+    seen = []
+
+    def fake_http(url, headers, data=None, timeout=30):
+        seen.append((url, dict(headers)))
+        if url.endswith("file-paths"):
+            return 200, json.dumps({"data": {"filesPaths": ["https://files.example/nse_com.csv",
+                                                            "https://files.example/nse_cm-v1.csv"]}}).encode()
+        return 200, b"pSymbol,pTrdSymbol;\n2885,RELIANCE-EQ\n9999,RELIANCE-BE\n1333,HDFCBANK-EQ\n"
+
+    monkeypatch.setattr(relay, "http", fake_http)
+    tok = relay.Kotak("secret-key-123456").tokens()
+    assert tok == {"RELIANCE": "2885", "HDFCBANK": "1333"}
+    file_call = [h for u, h in seen if u.endswith("nse_cm-v1.csv")][0]
+    assert "Authorization" not in file_call                      # the key never goes to the file store

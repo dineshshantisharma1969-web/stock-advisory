@@ -90,7 +90,11 @@ class KotakClient:
                 and not p.rsplit("/", 1)[-1].lower().startswith(segment.lower() + "m")]
         if not want:
             raise RuntimeError(f"Kotak scrip master has no file for {segment}")
-        df = pd.read_csv(io.StringIO(self._get(want[0]).text), low_memory=False)
+        # the file sits on a public file store: send NO Kotak key there (it rejects unknown Authorization headers)
+        r = self.s.get(want[0], headers={"User-Agent": self.h["User-Agent"]}, timeout=60)
+        if r.status_code != 200:
+            raise RuntimeError(f"Kotak scrip file download -> {r.status_code}")
+        df = pd.read_csv(io.StringIO(r.text), low_memory=False)
         df.columns = [c.strip().rstrip(";") for c in df.columns]
         return df
 

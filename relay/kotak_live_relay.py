@@ -127,7 +127,7 @@ class Kotak:
                 and not p.rsplit("/", 1)[-1].lower().startswith("nse_com")]
         if not want:
             raise RuntimeError("Kotak scrip master has no nse_cm file")
-        rows = csv.DictReader(io.StringIO(self._get(want[0]).decode("utf-8", "replace")))
+        rows = csv.DictReader(io.StringIO(http(want[0], {"User-Agent": "Mozilla/5.0"})[1].decode("utf-8", "replace")))
         out = {}
         for r in rows:
             r = {k.strip().rstrip(";"): (v or "").strip() for k, v in r.items() if k}
@@ -221,7 +221,7 @@ def main():
         raise
     except Exception as e:
         log(f"Could not start: {e}")
-        if "consumer" in str(e).lower() or "424" in str(e) or "401" in str(e) or "403" in str(e):
+        if "consumer key" in str(e).lower():
             log("Kotak did not accept the consumer key. Copy the CURRENT key from Kotak Neo -> More -> Trade API "
                 "into relay_settings.ini.")
         sys.exit(1)

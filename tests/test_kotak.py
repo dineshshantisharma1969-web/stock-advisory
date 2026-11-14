@@ -36,7 +36,10 @@ class FakeKotak:
         self.hist_calls = []
 
     def get(self, url, headers=None, params=None, timeout=None):
-        assert headers["Authorization"] == "ck1"
+        if url.endswith(".csv"):        # scrip files sit on a public file store: the key must NOT be sent there
+            assert "Authorization" not in headers
+        else:
+            assert headers["Authorization"] == "ck1"
         if url.endswith("/masterscrip/file-paths"):
             return R(200, PATHS)
         if url.endswith("nse_cm-v1.csv"):
