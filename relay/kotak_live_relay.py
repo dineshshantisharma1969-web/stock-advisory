@@ -70,7 +70,7 @@ def settings() -> dict:
     if not SETTINGS.exists():
         sys.exit(f"Settings file not found: {SETTINGS}\nCopy relay_settings_TEMPLATE.ini to relay_settings.ini "
                  "and fill it in.")
-    cp = configparser.ConfigParser()
+    cp = configparser.ConfigParser(interpolation=None)   # passphrases may contain % and other symbols
     cp.read(SETTINGS, encoding="utf-8")
     s = {"consumer_key": cp.get("kotak", "consumer_key", fallback="").strip().strip('"'),
          "passphrase": cp.get("app", "passphrase", fallback="").strip().strip('"'),

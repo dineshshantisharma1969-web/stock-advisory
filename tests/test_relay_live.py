@@ -108,3 +108,12 @@ def test_status_lines():
     assert live.describe_status({"token_hash": "x", "last_push": "2026-11-16T04:58:00+00:00", "last_count": 498},
                                 now=NOW) == ("ok", "Live: last update 16 Nov 10:28 (498 prices).")
     assert live.describe_status({"token_hash": "x", "last_push": "2026-11-13T09:59:00+00:00"}, now=NOW)[0] == "stale"
+
+
+def test_settings_accept_percent_and_symbols(tmp_path, monkeypatch):
+    ini = tmp_path / "relay_settings.ini"
+    ini.write_text("[kotak]\nconsumer_key = abc123def456ghi\n[app]\npassphrase = My%$pass#word 100%!\n"
+                   "supabase_url = https://x.supabase.co/\npublishable_key = sb_publishable_x\n", encoding="utf-8")
+    monkeypatch.setattr(relay, "SETTINGS", ini)
+    s = relay.settings()
+    assert s["passphrase"] == "My%$pass#word 100%!" and s["url"] == "https://x.supabase.co"
