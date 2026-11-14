@@ -3,3 +3,5 @@ data/*.db
 __pycache__/
 .pytest_cache/
 .streamlit/secrets.toml
+bot_settings.ini
+data/bot_log.txt

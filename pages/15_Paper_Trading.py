@@ -22,6 +22,19 @@ BOOKS = {"claude": ("Main book (A-grade setups only)", 5, 0.02),
 book = st.radio("Book", list(BOOKS), format_func=lambda b: BOOKS[b][0], horizontal=True)
 label, max_day, max_risk = BOOKS[book]
 
+_runs = c.select("bot_runs", {"order": "id.desc", "limit": "1"})
+if _runs:
+    _r = _runs[0]
+    _at = pd.Timestamp(_r["run_at"]).tz_convert("Asia/Kolkata")
+    with st.expander(("✅" if _r.get("ok") else "⚠️") + f" Bot summary · ran {_at:%d %b %H:%M} · prices of {_r.get('session')}",
+                     expanded=False):
+        st.caption("WhatsApp-ready text - use the copy icon at the top right of the box.")
+        st.code(_r.get("summary") or "", language=None)
+        if not _r.get("ok"):
+            st.warning(_r.get("log") or "The bot reported a problem.")
+else:
+    st.caption("🤖 The daily bot has not run yet (office PC, weekdays 8:30 am).")
+
 if book == income.BOOK:
     st.caption("Rules: one hedged condor a week, one lot · sold strikes 0.75 expected moves from Nifty · closed if "
                "Nifty ends a day at or beyond a sold strike, else held to expiry · every price is NSE's closing "
@@ -83,10 +96,15 @@ except Exception:
     _lp = pd.DataFrame()
 if len(_lp):
     df.loc[_lp.index, "net_pnl"] = _lp["live_pnl"]
-    df.loc[_lp.index, "exit"] = _lp["live"]
+    df.loc[_lp.index, "exit"] = _lp["live_exit"]
+    _sq = _lp[_lp["live_status"] != "open"]
+    df.loc[_sq.index, "status"] = _sq["live_status"]
+    closed = df[df["status"].isin(["target", "stop", "trail stop", "expired", "exit signal",
+                                   "stop (squared off)", "target (squared off)"])]
     opn = df[df["status"] == "open"]
     _t = _lp["live_time"].max().tz_convert(_live.IST)
-    st.success(f"🟢 Open positions marked to Kotak live prices ({_t:%H:%M}).")
+    st.success(f"🟢 Open positions marked to Kotak live prices ({_t:%H:%M})."
+               + (f" Squared off today: {', '.join(_sq['symbol'])}." if len(_sq) else ""))
 realised, unreal = closed["net_pnl"].sum(), opn["net_pnl"].sum()
 equity = snapshot.CAPITAL + realised + unreal
 k = st.columns(6)

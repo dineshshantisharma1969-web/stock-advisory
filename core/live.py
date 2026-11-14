@@ -60,7 +60,10 @@ def describe_status(st: dict, now: datetime | None = None) -> tuple[str, str]:
 
 
 def live_pnl(trades: pd.DataFrame, q: pd.DataFrame, cost_per_side: float = 0.001) -> pd.DataFrame:
-    """Open paper positions marked to the live price. trades needs symbol, side, fill, qty, status."""
+    """Open paper positions marked to the live price. If the live price is through the stop (or the fixed
+    target), the position is squared off at that level - the same rule the end-of-day scorer applies with the
+    day's low/high, so the live view and the next morning's official result agree.
+    trades needs symbol, side, fill, qty, status, stop, target (trail_atr / exit_rule optional)."""
     if trades.empty or q.empty:
         return pd.DataFrame()
     o = trades[trades["status"] == "open"].copy()
@@ -68,11 +71,25 @@ def live_pnl(trades: pd.DataFrame, q: pd.DataFrame, cost_per_side: float = 0.001
     if o.empty:
         return pd.DataFrame()
     o["live"] = o["symbol"].map(q["ltp"])
+    for col in ("stop", "target"):          # a position without a level is simply never squared off on it
+        if col not in o:
+            o[col] = float("nan")
     side = o["side"].map({"long": 1, "short": -1}).fillna(1)
-    o["live_pnl"] = (o["live"] - o["fill"]) * o["qty"] * side - cost_per_side * o["fill"] * o["qty"]
+    trail = o["trail_atr"].notna() if "trail_atr" in o else pd.Series(False, index=o.index)
+    rule = o["exit_rule"].notna() if "exit_rule" in o else pd.Series(False, index=o.index)
+    stop_hit = ((side > 0) & (o["live"] <= o["stop"])) | ((side < 0) & (o["live"] >= o["stop"]))
+    tgt_hit = ~trail & ~rule & ~stop_hit & (((side > 0) & (o["live"] >= o["target"])) |
+                                            ((side < 0) & (o["live"] <= o["target"])))
+    o["live_status"] = "open"
+    o.loc[stop_hit, "live_status"] = "stop (squared off)"
+    o.loc[tgt_hit, "live_status"] = "target (squared off)"
+    exit_px = o["live"].where(~stop_hit, o["stop"]).where(~tgt_hit, o["target"])
+    done = stop_hit | tgt_hit
+    costs = cost_per_side * o["fill"] * o["qty"] + done * cost_per_side * exit_px * o["qty"]
+    o["live_exit"] = exit_px
+    o["live_pnl"] = (exit_px - o["fill"]) * o["qty"] * side - costs
     o["live_time"] = o["symbol"].map(q["updated_at"])
     return o
-
 
 def latest(client) -> pd.DataFrame:
     """Every quote the relay has saved (any age), indexed by symbol, with updated_at as a timestamp."""
