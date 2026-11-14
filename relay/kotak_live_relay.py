@@ -33,7 +33,7 @@ KOTAK = "https://mis.kotaksecurities.com"
 IST = timezone(timedelta(hours=5, minutes=30))
 START, END = (9, 14), (15, 32)          # market window, IST
 EVERY = 60                              # seconds between rounds
-BATCH = 50                              # Kotak allows 50 instruments per quote call
+BATCH = 40                              # Kotak rejects a request of 50 or more instruments
 INDICES = {"NIFTY 50": "Nifty 50", "NIFTY BANK": "Nifty Bank", "INDIA VIX": "India VIX"}
 SECRETS: list[str] = []
 

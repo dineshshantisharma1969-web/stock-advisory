@@ -51,7 +51,7 @@ def test_one_round_batches_by_50_maps_symbols_and_drops_unsupported_indices():
     tok = {f"S{i}": str(1000 + i) for i in range(120)}
     idx = {"on": True}
     n, msg = relay.one_round(k, a, tok, list(tok) + ["NOTOKEN"], idx)
-    assert n == 120 and [len(c) for c in k.calls[:3]] == [50, 50, 20]
+    assert n == 120 and [len(c) for c in k.calls[:3]] == [40, 40, 40]
     assert {r["symbol"] for r in a.pushed[0]} == set(tok) and "1 symbols without a Kotak token" in msg
     assert idx["on"] is False                       # index request failed once -> not asked again
     relay.one_round(k, a, tok, list(tok), idx)
