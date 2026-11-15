@@ -6,7 +6,8 @@ WhatsApp-ready P&L summary in the app (Paper trading -> "Bot summary"). It never
 
 ## One-time setup (about 20 minutes)
 1. Unzip the app folder and copy it to `C:\nifty-desk` (so `C:\nifty-desk\daily_bot.py` exists).
-2. Double-click `install_bot.bat` - it installs the four Python packages the bot needs (2-5 minutes).
+2. Double-click `install_bot.bat` - it installs the packages the bot needs into its own folder `.venv`
+   (2-5 minutes), so other Python programs on the PC are not affected.
 3. Make a secret key just for this PC: supabase.com -> your project -> Project Settings -> API Keys ->
    Secret keys -> "New secret key", name it `office-pc`, copy it.
 4. Copy `bot_settings_TEMPLATE.ini` to `bot_settings.ini`, open it in Notepad, paste the key on the

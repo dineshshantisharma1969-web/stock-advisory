@@ -5,3 +5,4 @@ __pycache__/
 .streamlit/secrets.toml
 bot_settings.ini
 data/bot_log.txt
+.venv/
