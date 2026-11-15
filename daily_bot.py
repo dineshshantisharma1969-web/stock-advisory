@@ -1,12 +1,13 @@
 """Daily paper-trading bot: does everything "Refresh live data" + "Prepare data for Claude" did, by itself.
 
-Run every weekday at about 8:30 am IST (before the 9:15 open) on the office PC:
+Run every weekday at 9:05 am IST (before the 9:15 open) on the office PC:
   1. Prices: adds yesterday's official NSE bhavcopy to the 5-year history (Yahoo full refresh once a week).
-  2. Backtest grades: re-run once a week (they only matter for publishing; all setups are grade C today).
-  3. Snapshot tables + scoring of every paper trade (fills, stops, P&L) from real prices.
-  4. The three rule-based paper books place today's trades (filled at today's 9:15 open):
+  2. Snapshot tables + scoring of every paper trade (fills, stops, P&L) from real prices.
+  3. The three rule-based paper books place today's trades (filled at today's 9:15 open):
        Momentum leaders · Pullbacks in F&O stocks · Nifty weekly condor (real NSE option prices).
-  5. A WhatsApp-ready P&L summary is saved in the app (Paper trading page -> "Bot summary").
+     No new trades are placed if the prices are stale (refresh failed).
+  4. A WhatsApp-ready P&L summary is saved in the app (Paper trading page -> "Bot summary").
+  5. Upkeep after the trades are in: FII/DII daily; fundamentals and setup grades once a week (slow).
 Paper trading only: it never connects to Kotak or places a real order.
 
     python daily_bot.py            normal run
@@ -98,6 +99,69 @@ def summary_text(client, prices: dict, placed: dict, condor: dict, session: date
     return "\n".join(lines)
 
 
+def saved_screen(universe):
+    """The fundamentals screen from the saved fundamentals (None if there are none yet)."""
+    from core import data, valuation
+    try:
+        fu, _ = data.load_cache("fund_live")
+        return valuation.screen(fu, universe) if fu else None
+    except Exception as e:                        # never let a fundamentals problem stop the scoring
+        log.warning("Fundamentals screen skipped: %s", e)
+        return None
+
+
+def housekeeping(client, prices: dict, universe, step, max_age_days: float = 7) -> list[str]:
+    """What 'Refresh live data' used to do by hand, so the app's other pages do not go stale:
+    FII/DII every day, fundamentals + setup grades once a week. Runs after the trades are placed.
+    Returns the names of the parts that were refreshed."""
+    from core import backtest, data, market, snapshot
+    did = []
+
+    def fii():
+        try:
+            market.merge_fii_dii(market.fetch_fii_dii_today())
+            did.append("FII/DII")
+        except Exception as e:                    # NSE publishes these in the evening and often blocks scripts
+            log.warning("FII/DII not updated (not a problem - upload on the FII/DII page if needed): %s", e)
+    step("FII/DII", fii)
+
+    def fundamentals():
+        old, saved = data.load_cache("fund_live")
+        if old and saved and datetime.now() - saved < timedelta(days=max_age_days):
+            log.info("Fundamentals are fresh (%s); skipping", f"{saved:%d %b}")
+            return
+        syms = list(universe["symbol"])
+        log.info("Refreshing fundamentals for %d companies (weekly, 10-20 minutes)...", len(syms))
+        merged, n_ok = data.merge_refresh(old, data.YahooProvider().all_fundamentals(syms, prices=prices),
+                                          data.usable_fundamentals)
+        if n_ok:
+            data.save_cache("fund_live", merged)
+            did.append("fundamentals")
+        log.info("Fundamentals: %d updated, %d kept from the previous run", n_ok, len(syms) - n_ok)
+        if n_ok < 0.5 * len(syms):
+            raise RuntimeError(f"only {n_ok} of {len(syms)} companies returned usable fundamentals")
+    step("Fundamentals", fundamentals)
+
+    def grades():
+        bt, saved = data.load_cache("backtest_live")
+        if bt is not None and saved and datetime.now() - saved < timedelta(days=max_age_days):
+            log.info("Backtest grades are fresh (%s); skipping", f"{saved:%d %b}")
+            return
+        log.info("Re-running the backtest (weekly, a few minutes)...")
+        tr = backtest.run(prices)
+        data.save_cache("backtest_live", backtest.summary(tr) if len(tr) else tr)
+        did.append("backtest grades")
+    step("Backtest", grades)
+
+    if {"fundamentals", "backtest grades"} & set(did):
+        def republish():
+            bt, _ = data.load_cache("backtest_live")
+            snapshot.publish(client, prices, universe, saved_screen(universe), bt, log=lambda m: log.warning("  %s", m))
+        step("Snapshot (after weekly refresh)", republish)
+    log.info("Upkeep: %s", ", ".join(did) or "nothing due")
+    return did
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--dry-run", action="store_true")
@@ -152,28 +216,16 @@ def main(argv=None) -> int:
             return 1
         log.warning("Using the previously saved prices.")
 
-    # 2. weekly backtest grades
-    def grades():
-        bt, saved = data.load_cache("backtest_live")
-        if bt is not None and saved and datetime.now() - saved < timedelta(days=7):
-            log.info("Backtest grades are fresh (%s); skipping", f"{saved:%d %b}")
-            return bt
-        log.info("Re-running the backtest (weekly, a few minutes)...")
-        tr = backtest.run(px)
-        summ = backtest.summary(tr) if len(tr) else tr
-        if not a.dry_run:
-            data.save_cache("backtest_live", summ)
-        return summ
-    summ = step("Backtest", grades)
-
-    # 3. snapshot + scoring
+    # 2. snapshot + scoring, with the grades and fundamentals already saved (the slow weekly jobs run in
+    #    step 5, AFTER the trades are placed, so they can never push an order past the 9:15 open)
+    summ, _ = data.load_cache("backtest_live")
     if not a.dry_run:
         def snap():
-            done = snapshot.publish(c, px, u, None, summ, log=lambda m: log.warning("  %s", m))
+            done = snapshot.publish(c, px, u, saved_screen(u), summ, log=lambda m: log.warning("  %s", m))
             log.info("Snapshot: %s", ", ".join(f"{k} {v}" for k, v in done.items()))
         step("Snapshot", snap)
 
-    # 4. the three books
+    # 3. the three books
     placed = {}
     if a.dry_run:
         existing = c.select("paper_trades", {"order": "id.asc"})
@@ -190,13 +242,17 @@ def main(argv=None) -> int:
             log.info("%s: %d new trade(s) %s", b, len(rows), [r["symbol"] for r in rows])
         log.info("Condor: opened %d, closed %d", len(condor["opened"]), len(condor["closed"]))
 
-    # 5. summary
+    # 4. summary
     text = step("Summary", lambda: summary_text(c, px, placed, condor, session)) or "Summary could not be built."
     print("\n" + text + "\n")
     if not a.dry_run:
         step("Save summary", lambda: c.insert("bot_runs", [{
             "session": session.isoformat(), "ok": not problems, "summary": text,
             "log": "\n".join(notes + problems)[:4000]}]))
+
+    # 5. weekly upkeep: FII/DII, fundamentals, backtest grades (slow; nothing here affects today's trades)
+    if not a.dry_run:
+        housekeeping(c, px, u, step)
     if problems:
         log.error("Finished with problems: %s", "; ".join(problems))
         return 1

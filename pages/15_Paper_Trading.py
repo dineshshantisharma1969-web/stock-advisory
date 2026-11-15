@@ -33,7 +33,7 @@ if _runs:
         if not _r.get("ok"):
             st.warning(_r.get("log") or "The bot reported a problem.")
 else:
-    st.caption("🤖 The daily bot has not run yet (office PC, weekdays 8:30 am).")
+    st.caption("🤖 The daily bot has not run yet (office PC, weekdays 9:05 am).")
 
 if book == income.BOOK:
     st.caption("Rules: one hedged condor a week, one lot · sold strikes 0.75 expected moves from Nifty · closed if "
@@ -97,10 +97,11 @@ except Exception:
 if len(_lp):
     df.loc[_lp.index, "net_pnl"] = _lp["live_pnl"]
     df.loc[_lp.index, "exit"] = _lp["live_exit"]
+    df.loc[_lp.index, "fill"] = _lp["live_fill"]          # today's new orders: filled at the 9:15 open
+    df.loc[_lp.index, "status"] = _lp["live_status"]
     _sq = _lp[_lp["live_status"] != "open"]
-    df.loc[_sq.index, "status"] = _sq["live_status"]
-    closed = df[df["status"].isin(["target", "stop", "trail stop", "expired", "exit signal",
-                                   "stop (squared off)", "target (squared off)"])]
+    closed = df[df["status"].isin(["target", "stop", "trail stop", "expired", "exit signal", "stop (squared off)",
+                                   "trail stop (squared off)", "target (squared off)"])]
     opn = df[df["status"] == "open"]
     _t = _lp["live_time"].max().tz_convert(_live.IST)
     st.success(f"🟢 Open positions marked to Kotak live prices ({_t:%H:%M})."

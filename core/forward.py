@@ -54,31 +54,79 @@ def order_date(signal_day: date, now: datetime | None = None) -> date:
     return d
 
 
-def plan(prices: dict, existing: list[dict], now: datetime | None = None) -> list[dict]:
-    """New trades for today, without writing anything (pure: easy to test)."""
-    sig = technicals.scan(prices, [SETUP], lookback_days=1, allow_short=False)
-    if sig.empty:
-        return []
-    ex = technicals.exit_rule(SETUP)
-    res = snapshot.evaluate_paper([t for t in existing if t.get("book") == BOOK], prices)
-    open_ids = {r["trade_id"] for r in res if r["status"] in ("open", "pending")}
-    held = {t["symbol"] for t in existing if t.get("book") == BOOK and t["id"] in open_ids}
-    exposure = sum(float(t["entry"]) * int(t["qty"]) for t in existing if t.get("book") == BOOK and t["id"] in open_ids)
-    sig = sig[~sig["symbol"].isin(held)].sort_values("rs_pct", ascending=False)
+MAX_SIGNAL_AGE = 2      # sessions between the signal day and the trade day (1 normally, 2 across a holiday)
+
+
+class StalePrices(RuntimeError):
+    pass
+
+
+def is_fresh(signal_day: date, trade_day: date) -> bool:
+    """A signal may only be traded at the very next session's open (one exchange holiday allowed)."""
+    return int(np.busday_count(pd.Timestamp(signal_day).date(), pd.Timestamp(trade_day).date())) <= MAX_SIGNAL_AGE
+
+
+def check_fresh(prices: dict, now: datetime | None = None) -> None:
+    """Refuse to trade when the price refresh failed and the saved prices are days old: yesterday's 'latest
+    session' would otherwise be traded again as if it were new."""
+    last = max((df.index[-1] for df in prices.values() if len(df)), default=None)
+    if last is None:
+        return                                      # nothing loaded: the plans find no signals anyway
+    last = pd.Timestamp(last).date()
+    trade_day = order_date(last, now)
+    if not is_fresh(last, trade_day):
+        raise StalePrices(f"latest prices are of {last:%d %b %Y}, too old to trade on {trade_day:%d %b %Y} "
+                          "- no new trades placed")
+
+
+def _book_state(existing: list[dict], book: str, prices: dict) -> tuple[set, float]:
+    """(stocks currently held or on order, rupee exposure) for one book."""
+    mine = [t for t in existing if t.get("book") == book]
+    live = {r["trade_id"] for r in snapshot.evaluate_paper(mine, prices) if r["status"] in ("open", "pending")}
+    mine = [t for t in mine if t["id"] in live]
+    return {t["symbol"] for t in mine}, sum(float(t["entry"]) * int(t["qty"]) for t in mine)
+
+
+def _size(signals, book: str, existing: list[dict], prices: dict, stop_atr: float, now, make) -> list[dict]:
+    """The books' shared rules: skip held stocks and stale signals, at most MAX_NEW a day, 1% risk at the
+    stop, total exposure capped. `make(r, trade_date, qty, risk_per_share)` builds the trade row."""
+    held, exposure = _book_state(existing, book, prices)
     out = []
-    for r in sig.itertuples():
+    for r in signals.itertuples():
         if len(out) >= MAX_NEW:
             break
-        risk_per_share = ex["atr_mult"] * float(r.atr)
-        if not (risk_per_share > 0 and math.isfinite(risk_per_share)):
+        trade_day = order_date(r.date, now)
+        risk_per_share = stop_atr * float(r.atr)
+        if r.symbol in held or not is_fresh(r.date, trade_day) or not (risk_per_share > 0 and math.isfinite(risk_per_share)):
             continue
         qty = int(CAPITAL * RISK // risk_per_share)
         value = qty * float(r.entry)
         if qty <= 0 or exposure + value > MAX_EXPOSURE * CAPITAL:
             continue
         exposure += value
-        out.append({
-            "trade_date": order_date(r.date, now).isoformat(), "book": BOOK, "symbol": r.symbol, "segment": "swing",
+        out.append(make(r, trade_day.isoformat(), qty, risk_per_share))
+    return out
+
+
+def _write(client, rows: list[dict], existing: list[dict]) -> list[dict]:
+    """Append the planned trades, skipping any already written (safe to run twice)."""
+    done = {(t["book"], str(t["trade_date"]), t["symbol"]) for t in existing}
+    rows = [r for r in rows if (r["book"], r["trade_date"], r["symbol"]) not in done]
+    if rows:
+        client.insert("paper_trades", rows)
+    return rows
+
+
+def plan(prices: dict, existing: list[dict], now: datetime | None = None) -> list[dict]:
+    """New trades for today, without writing anything (pure: easy to test)."""
+    sig = technicals.scan(prices, [SETUP], lookback_days=1, allow_short=False)
+    if sig.empty:
+        return []
+    ex = technicals.exit_rule(SETUP)
+
+    def make(r, trade_date, qty, risk_per_share):
+        return {
+            "trade_date": trade_date, "book": BOOK, "symbol": r.symbol, "segment": "swing",
             "side": "long", "entry_type": "open", "entry": round(float(r.entry), 2),
             "stop": round(float(r.entry) - risk_per_share, 2), "target": round(float(r.entry) + 3 * risk_per_share, 2),
             "qty": qty, "horizon_days": int(ex["max_hold"]), "trail_atr": float(ex["atr_mult"]),
@@ -86,8 +134,8 @@ def plan(prices: dict, existing: list[dict], now: datetime | None = None) -> lis
             "rationale": (f"Signal {r.date}: relative strength top {100 - 100 * float(r.rs_pct):.0f}% of Nifty 500, "
                           f"above 50 DMA, market breadth healthy. Risk Rs {qty * risk_per_share:,.0f} (1%). "
                           f"Exit: 3x ATR trailing stop, max 60 sessions."),
-        })
-    return out
+        }
+    return _size(sig.sort_values("rs_pct", ascending=False), BOOK, existing, prices, float(ex["atr_mult"]), now, make)
 
 
 DIP_BOOK = "fwd-dip"
@@ -114,51 +162,29 @@ def dip_plan(prices: dict, existing: list[dict], fo_symbols, now: datetime | Non
     sig = dip_signals(prices, fo_symbols)
     if sig.empty:
         return []
-    mine = [t for t in existing if t.get("book") == DIP_BOOK]
-    res = snapshot.evaluate_paper(mine, prices)
-    open_ids = {r["trade_id"] for r in res if r["status"] in ("open", "pending")}
-    held = {t["symbol"] for t in mine if t["id"] in open_ids}
-    exposure = sum(float(t["entry"]) * int(t["qty"]) for t in mine if t["id"] in open_ids)
-    out = []
-    for r in sig[~sig["symbol"].isin(held)].sort_values("rsi2").itertuples():
-        if len(out) >= MAX_NEW:
-            break
-        risk_per_share = DIP_STOP_ATR * r.atr
-        qty = int(CAPITAL * RISK // risk_per_share)
-        value = qty * r.entry
-        if qty <= 0 or exposure + value > MAX_EXPOSURE * CAPITAL:
-            continue
-        exposure += value
-        out.append({
-            "trade_date": order_date(r.date, now).isoformat(), "book": DIP_BOOK, "symbol": r.symbol,
+
+    def make(r, trade_date, qty, risk_per_share):
+        return {
+            "trade_date": trade_date, "book": DIP_BOOK, "symbol": r.symbol,
             "segment": "fno", "side": "long", "entry_type": "open", "entry": round(r.entry, 2),
             "stop": round(r.entry - risk_per_share, 2), "target": round(r.entry + risk_per_share, 2),
             "qty": qty, "horizon_days": DIP_HOLD, "exit_rule": "sma5", "setup": DIP_SETUP, "grade": "forward test",
             "rationale": (f"Signal {r.date}: above 200 DMA, 2-day RSI {r.rsi2:.1f}. Risk Rs {qty * risk_per_share:,.0f} "
                           f"(1%) at a 4x ATR emergency stop. Exit: next open after the first close above the "
                           f"5-day average, max {DIP_HOLD} sessions. Target shown is a reference only."),
-        })
-    return out
+        }
+    return _size(sig.sort_values("rsi2"), DIP_BOOK, existing, prices, DIP_STOP_ATR, now, make)
 
 
 def run_dip(client, prices: dict, now: datetime | None = None) -> list[dict]:
     """Plan and write today's pullback-book trades. Safe to run twice."""
-    fo = [r["symbol"] for r in client.select("fo_lots")]
+    check_fresh(prices, now)
     existing = client.select("paper_trades", {"order": "id.asc"})
-    rows = dip_plan(prices, existing, fo, now)
-    done = {(t["book"], str(t["trade_date"]), t["symbol"]) for t in existing}
-    rows = [r for r in rows if (r["book"], r["trade_date"], r["symbol"]) not in done]
-    if rows:
-        client.insert("paper_trades", rows)
-    return rows
+    return _write(client, dip_plan(prices, existing, [r["symbol"] for r in client.select("fo_lots")], now), existing)
 
 
 def run(client, prices: dict, now: datetime | None = None) -> list[dict]:
     """Plan and write today's forward-test trades. Safe to run twice: duplicates are skipped."""
+    check_fresh(prices, now)
     existing = client.select("paper_trades", {"order": "id.asc"})
-    rows = plan(prices, existing, now)
-    done = {(t["book"], str(t["trade_date"]), t["symbol"]) for t in existing}
-    rows = [r for r in rows if (r["book"], r["trade_date"], r["symbol"]) not in done]
-    if rows:
-        client.insert("paper_trades", rows)
-    return rows
+    return _write(client, plan(prices, existing, now), existing)

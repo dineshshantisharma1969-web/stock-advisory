@@ -53,9 +53,13 @@ def test_one_round_batches_by_50_maps_symbols_and_drops_unsupported_indices():
     n, msg = relay.one_round(k, a, tok, list(tok) + ["NOTOKEN"], idx)
     assert n == 120 and [len(c) for c in k.calls[:3]] == [40, 40, 40]
     assert {r["symbol"] for r in a.pushed[0]} == set(tok) and "1 symbols without a Kotak token" in msg
-    assert idx["on"] is False                       # index request failed once -> not asked again
+    assert idx["on"] is True and idx["fails"] == 1  # one failure (a timeout, say) does not switch indices off
     relay.one_round(k, a, tok, list(tok), idx)
-    assert all(c[0][1] != "Nifty 50" for c in k.calls[4:])
+    relay.one_round(k, a, tok, list(tok), idx)
+    assert idx["on"] is False                       # three in a row -> not asked again
+    before = len(k.calls)
+    relay.one_round(k, a, tok, list(tok), idx)
+    assert all(c[0][1] != "Nifty 50" for c in k.calls[before:])
 
 
 def test_market_window():

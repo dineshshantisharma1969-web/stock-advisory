@@ -107,7 +107,7 @@ def grade_rows(summary: pd.DataFrame | None) -> list[dict]:
 # ------------------------------------------------------------------ paper trading
 def evaluate_trade(t: dict, px: pd.DataFrame | None) -> dict:
     res = {"trade_id": int(t["id"]), "status": "pending", "fill": None, "fill_date": None, "exit": None,
-           "exit_date": None, "gross_pnl": None, "costs": None, "net_pnl": None, "r_multiple": None}
+           "exit_date": None, "gross_pnl": None, "costs": None, "net_pnl": None, "r_multiple": None, "stop_now": None}
     if px is None or px.empty:
         res["status"] = "no data"
         return res
@@ -167,11 +167,13 @@ def evaluate_trade(t: dict, px: pd.DataFrame | None) -> dict:
             exit_px = float(bars["Close"].iloc[-1])       # open position marked to the latest close
     gross = (exit_px - fill) * qty * side
     costs = COST_PER_SIDE * (fill + (exit_px if status != "open" else 0)) * qty
-    risk = abs(float(t["entry"]) - stop) * qty
+    risk = abs(float(t["entry"]) - init_stop) * qty      # R is measured against the risk taken at entry
     res.update({"status": status, "fill": fill, "fill_date": bars.index[0].strftime("%Y-%m-%d"), "exit": exit_px,
                 "exit_date": exit_d.strftime("%Y-%m-%d") if exit_d is not None else None,
                 "gross_pnl": gross, "costs": costs, "net_pnl": gross - costs,
-                "r_multiple": (gross - costs) / risk if risk else None})
+                "r_multiple": (gross - costs) / risk if risk else None,
+                # the stop in force for the next bar (trailed) - the live view squares off against this one
+                "stop_now": stop if status == "open" else None})
     return res
 
 

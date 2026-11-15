@@ -136,12 +136,19 @@ def open_trade(chain: pd.DataFrame, expiry: date, vix: float, lot: int = LOT) ->
     return t
 
 
-def mark(t: dict, chain: pd.DataFrame) -> dict:
-    """Apply one later session to an open trade. Returns the fields to update (always last_checked)."""
+def mark(t: dict, chain: pd.DataFrame, settle: tuple | None = None) -> dict:
+    """Apply one later session to an open trade. Returns the fields to update.
+    If this session is AFTER the expiry (the expiry day's own file was missing), the trade must settle on the
+    expiry day's Nifty close, not on this later day's: pass settle=(close, day). Without it nothing changes,
+    so the next run tries again."""
     d, spot = chain["date"].iloc[0], spot_of(chain)
     exp, credit = _d(t["expiry"]), float(t["credit"])
+    if d > exp:
+        if settle is None:
+            return {}
+        spot, d = float(settle[0]), settle[1]
     upd = {"last_checked": d.isoformat()}
-    if d >= exp:
+    if d >= exp or settle is not None:
         pnl, status = credit - intrinsic(t, spot), "expired"
     elif spot <= float(t["sell_put"]) or spot >= float(t["sell_call"]):
         v = value(chain, t)
@@ -187,7 +194,17 @@ def fetch_vix(start: date) -> dict:
     return {ix.date(): float(v) / 100 for ix, v in h.items()}
 
 
-def step(client, today: date | None = None, fetch=None, vix_fn=fetch_vix, log=lambda m: None) -> dict:
+def fetch_spot(day: date) -> tuple | None:
+    """(Nifty close, session) for the last session on or before `day`, from Yahoo Finance."""
+    import yfinance as yf
+    h = yf.Ticker("^NSEI").history(start=day - timedelta(days=7), end=day + timedelta(days=1),
+                                   auto_adjust=False)["Close"].dropna()
+    h = h[[ix.date() <= day for ix in h.index]]
+    return (float(h.iloc[-1]), h.index[-1].date()) if len(h) else None
+
+
+def step(client, today: date | None = None, fetch=None, vix_fn=fetch_vix, log=lambda m: None,
+         spot_fn=fetch_spot) -> dict:
     """Bring the condor book up to date: score open trades day by day, then open any cycle that is due.
     Idempotent. `fetch(day) -> chain | None` and `vix_fn(start) -> {date: vix}` are injectable for tests."""
     today = today or date.today()
@@ -201,6 +218,18 @@ def step(client, today: date | None = None, fetch=None, vix_fn=fetch_vix, log=la
             cache[d] = fetch(d)
         return cache[d]
 
+    def apply(t, ch):
+        """mark(), fetching the expiry-day Nifty close when the first file we have is from after the expiry."""
+        settle = None
+        if ch["date"].iloc[0] > _d(t["expiry"]):
+            try:
+                settle = spot_fn(_d(t["expiry"]))
+            except Exception as e:
+                log(f"Condor {t['expiry']}: expiry-day Nifty close not available ({e})")
+            if settle is None:
+                log(f"Condor {t['expiry']}: waiting for the expiry-day Nifty close - will retry on the next run")
+        return mark(t, ch, settle)
+
     rows = client.select("condor_trades", {"order": "expiry.asc"})
     out = {"closed": [], "opened": [], "open": 0}
     for t in rows:
@@ -210,7 +239,9 @@ def step(client, today: date | None = None, fetch=None, vix_fn=fetch_vix, log=la
             ch = chain(d)
             if ch is None:
                 continue
-            upd = mark(t, ch)
+            upd = apply(t, ch)
+            if not upd:
+                break                                   # cannot settle yet: leave it open and untouched
             t.update(upd)
             client.update("condor_trades", {"expiry": t["expiry"]}, upd)
             if t["status"] != "open":
@@ -243,7 +274,7 @@ def step(client, today: date | None = None, fetch=None, vix_fn=fetch_vix, log=la
         for d in _weekdays(d0 + timedelta(days=1), today):      # catch up if the entry day was a while ago
             ch = chain(d)
             if ch is not None and t["status"] == "open":
-                t.update(mark(t, ch))
+                t.update(apply(t, ch))
         client.insert("condor_trades", [t], upsert_on="expiry")
         out["opened"].append(t)
     out["open"] = sum(1 for t in rows if t["status"] == "open") + sum(1 for t in out["opened"] if t["status"] == "open")

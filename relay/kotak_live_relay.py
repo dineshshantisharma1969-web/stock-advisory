@@ -34,6 +34,7 @@ IST = timezone(timedelta(hours=5, minutes=30))
 START, END = (9, 14), (15, 32)          # market window, IST
 EVERY = 60                              # seconds between rounds
 BATCH = 40                              # Kotak rejects a request of 50 or more instruments
+INDEX_TRIES = 3                         # index failures in a row before the relay stops asking
 INDICES = {"NIFTY 50": "Nifty 50", "NIFTY BANK": "Nifty Bank", "INDIA VIX": "India VIX"}
 SECRETS: list[str] = []
 
@@ -195,9 +196,15 @@ def one_round(kotak: Kotak, app: App, tok: dict, symbols: list[str], use_indices
                 r = to_row(key, q) if key else None
                 if r:
                     rows.append(r)
+            use_indices["fails"] = 0
         except Exception as e:
-            use_indices["on"] = False          # this account/API does not serve indices this way: stop asking
-            log(f"index quotes not available ({e}); continuing with stocks only")
+            # one timeout must not cost the indices for the day: stop asking only after 3 failures in a row
+            use_indices["fails"] = use_indices.get("fails", 0) + 1
+            if use_indices["fails"] >= INDEX_TRIES:
+                use_indices["on"] = False
+                log(f"index quotes not available ({e}); continuing with stocks only")
+            else:
+                log(f"index quotes failed ({e}); will try again next round")
     msg = f"{len(rows)} prices from Kotak, {errors} failed batches, {len(symbols) - len(by_tok)} symbols without a Kotak token"
     n = app.push(rows, msg) if rows else 0
     return n, msg

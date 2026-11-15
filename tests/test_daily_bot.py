@@ -80,7 +80,9 @@ def test_bot_runs_end_to_end_with_fakes(monkeypatch, tmp_path):
     monkeypatch.setattr(forward, "run", lambda c, p: [{"symbol": "A"}])
     monkeypatch.setattr(forward, "run_dip", lambda c, p: [])
     monkeypatch.setattr(income, "step", lambda c, log=None: {"opened": [], "closed": [], "open": 0})
+    monkeypatch.setattr(forward, "run", lambda c, p: calls.append("trade") or [{"symbol": "A"}])
+    monkeypatch.setattr(bot, "housekeeping", lambda c, p, u, step: calls.append("upkeep") or [])
     assert bot.main([]) == 0
-    assert calls == ["publish"]
+    assert calls == ["publish", "trade", "upkeep"]       # slow weekly jobs only after the trades are placed
     run = db.tables["bot_runs"][0]
     assert run["ok"] is True and "New today: A (at 9:15 open)" in run["summary"]

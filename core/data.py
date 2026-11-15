@@ -13,7 +13,7 @@ from __future__ import annotations
 import hashlib
 import pickle
 import time
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 import numpy as np
 import pandas as pd
@@ -159,6 +159,18 @@ def _last(lst, default=np.nan):
     return lst[-1] if lst else default
 
 
+IST = timezone(timedelta(hours=5, minutes=30))
+
+
+def drop_unfinished(df: pd.DataFrame, now: datetime | None = None) -> pd.DataFrame:
+    """During market hours Yahoo's last daily bar is today's half-finished session. Saving it as a full day
+    would score stops and signals on a partial high/low/close, so it is dropped until after the close."""
+    now = (now or datetime.now(timezone.utc)).astimezone(IST)
+    if len(df) and (now.hour, now.minute) < (15, 45) and pd.Timestamp(df.index[-1]).date() >= now.date():
+        return df[[pd.Timestamp(d).date() < now.date() for d in df.index]]
+    return df
+
+
 class YahooProvider:
     name = "Yahoo Finance"
 
@@ -172,7 +184,7 @@ class YahooProvider:
             for s in batch:
                 try:
                     df = raw[yahoo_symbol(s)] if isinstance(raw.columns, pd.MultiIndex) else raw
-                    df = df[["Open", "High", "Low", "Close", "Volume"]].dropna(subset=["Close"])
+                    df = drop_unfinished(df[["Open", "High", "Low", "Close", "Volume"]].dropna(subset=["Close"]))
                     if len(df):
                         out[s] = df
                 except KeyError:

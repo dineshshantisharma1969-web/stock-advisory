@@ -59,37 +59,58 @@ def describe_status(st: dict, now: datetime | None = None) -> tuple[str, str]:
     return "stale", f"Last update {when} ({age:.0f} min ago). {st.get('last_message') or ''}".strip()
 
 
-def live_pnl(trades: pd.DataFrame, q: pd.DataFrame, cost_per_side: float = 0.001) -> pd.DataFrame:
-    """Open paper positions marked to the live price. If the live price is through the stop (or the fixed
-    target), the position is squared off at that level - the same rule the end-of-day scorer applies with the
-    day's low/high, so the live view and the next morning's official result agree.
-    trades needs symbol, side, fill, qty, status, stop, target (trail_atr / exit_rule optional)."""
+def live_pnl(trades: pd.DataFrame, q: pd.DataFrame, cost_per_side: float = 0.001, today=None) -> pd.DataFrame:
+    """Paper positions marked to the live price. If the live price is through the stop (or the fixed target),
+    the position is squared off at that level - the same rule the end-of-day scorer applies with the day's
+    low/high, so the live view and the next morning's official result agree.
+      * The stop is the one in force today: `stop_now` (the trailed stop from the scorer) when present.
+      * A market order placed for today ("pending", entry at the open) is filled at today's opening price.
+    trades needs symbol, side, fill, qty, status, stop, target (stop_now / trail_atr / exit_rule / entry_type /
+    trade_date optional). Result adds live, live_fill, live_status, live_exit, live_pnl, live_time."""
     if trades.empty or q.empty:
         return pd.DataFrame()
-    o = trades[trades["status"] == "open"].copy()
-    o = o[o["symbol"].isin(q.index)]
+    today = pd.Timestamp(today or datetime.now(IST).date())
+    is_open = trades["status"] == "open"
+    new = pd.Series(False, index=trades.index)
+    if {"entry_type", "trade_date"} <= set(trades.columns) and "open" in q:
+        day_open = pd.to_numeric(trades["symbol"].map(q["open"]), errors="coerce")
+        new = ((trades["status"] == "pending") & (trades["entry_type"] == "open") & (day_open > 0)
+               & (pd.to_datetime(trades["trade_date"], errors="coerce") <= today))
+    o = trades[(is_open | new) & trades["symbol"].isin(q.index)].copy()
     if o.empty:
         return pd.DataFrame()
+    new = new.reindex(o.index)
     o["live"] = o["symbol"].map(q["ltp"])
-    for col in ("stop", "target"):          # a position without a level is simply never squared off on it
+    for col in ("stop", "target", "fill"):   # a position without a level is simply never squared off on it
         if col not in o:
             o[col] = float("nan")
+    o["live_fill"] = pd.to_numeric(o["fill"], errors="coerce")
+    if new.any():
+        o.loc[new, "live_fill"] = pd.to_numeric(o.loc[new, "symbol"].map(q["open"]), errors="coerce")
+    stop = pd.to_numeric(o["stop"], errors="coerce")
+    trailed = pd.Series(False, index=o.index)
+    if "stop_now" in o:
+        now_stop = pd.to_numeric(o["stop_now"], errors="coerce")
+        trailed = now_stop.notna() & ~new & (now_stop != stop)
+        stop = now_stop.where(now_stop.notna() & ~new, stop)
     side = o["side"].map({"long": 1, "short": -1}).fillna(1)
     trail = o["trail_atr"].notna() if "trail_atr" in o else pd.Series(False, index=o.index)
     rule = o["exit_rule"].notna() if "exit_rule" in o else pd.Series(False, index=o.index)
-    stop_hit = ((side > 0) & (o["live"] <= o["stop"])) | ((side < 0) & (o["live"] >= o["stop"]))
+    stop_hit = ((side > 0) & (o["live"] <= stop)) | ((side < 0) & (o["live"] >= stop))
     tgt_hit = ~trail & ~rule & ~stop_hit & (((side > 0) & (o["live"] >= o["target"])) |
                                             ((side < 0) & (o["live"] <= o["target"])))
     o["live_status"] = "open"
     o.loc[stop_hit, "live_status"] = "stop (squared off)"
+    o.loc[stop_hit & trailed, "live_status"] = "trail stop (squared off)"
     o.loc[tgt_hit, "live_status"] = "target (squared off)"
-    exit_px = o["live"].where(~stop_hit, o["stop"]).where(~tgt_hit, o["target"])
+    exit_px = o["live"].where(~stop_hit, stop).where(~tgt_hit, o["target"])
     done = stop_hit | tgt_hit
-    costs = cost_per_side * o["fill"] * o["qty"] + done * cost_per_side * exit_px * o["qty"]
+    costs = cost_per_side * o["live_fill"] * o["qty"] + done * cost_per_side * exit_px * o["qty"]
     o["live_exit"] = exit_px
-    o["live_pnl"] = (exit_px - o["fill"]) * o["qty"] * side - costs
+    o["live_pnl"] = (exit_px - o["live_fill"]) * o["qty"] * side - costs
     o["live_time"] = o["symbol"].map(q["updated_at"])
     return o
+
 
 def latest(client) -> pd.DataFrame:
     """Every quote the relay has saved (any age), indexed by symbol, with updated_at as a timestamp."""
