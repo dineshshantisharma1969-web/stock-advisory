@@ -116,7 +116,7 @@ def test_condor_step_waits_then_uses_the_expiry_close():
 
 # 7 -------------------------------------------------------------------------------------------------
 def test_housekeeping_refreshes_weekly_parts_and_republishes(monkeypatch):
-    from core import backtest, market
+    from core import backtest
     saved, published = {}, []
     u = pd.DataFrame({"symbol": ["A", "B"]})
     monkeypatch.setattr(data, "load_cache", lambda name, max_age_hours=None: (saved.get(name), None))
@@ -124,7 +124,6 @@ def test_housekeeping_refreshes_weekly_parts_and_republishes(monkeypatch):
     monkeypatch.setattr(data.YahooProvider, "all_fundamentals",
                         lambda self, syms, progress=None, pause=0.3, prices=None: {s: {"symbol": s} for s in syms})
     monkeypatch.setattr(data, "usable_fundamentals", lambda f: True)
-    monkeypatch.setattr(market, "fetch_fii_dii_today", lambda: (_ for _ in ()).throw(RuntimeError("NSE blocked")))
     monkeypatch.setattr(backtest, "run", lambda prices: pd.DataFrame())
     monkeypatch.setattr(bot, "saved_screen", lambda universe: "SCREEN")
     monkeypatch.setattr(snapshot, "publish", lambda c, p, un, screen, bt, log=print: published.append(screen))
@@ -137,5 +136,5 @@ def test_housekeeping_refreshes_weekly_parts_and_republishes(monkeypatch):
             problems.append(name)
 
     did = bot.housekeeping(None, {}, u, step)
-    assert did == ["fundamentals", "backtest grades"] and not problems      # FII/DII failure is not a problem
+    assert did == ["fundamentals", "backtest grades"] and not problems
     assert set(saved["fund_live"]) == {"A", "B"} and published == ["SCREEN"]

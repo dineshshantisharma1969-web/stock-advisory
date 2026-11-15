@@ -7,7 +7,9 @@ Run every weekday at 9:05 am IST (before the 9:15 open) on the office PC:
        Momentum leaders · Pullbacks in F&O stocks · Nifty weekly condor (real NSE option prices).
      No new trades are placed if the prices are stale (refresh failed).
   4. A WhatsApp-ready P&L summary is saved in the app (Paper trading page -> "Bot summary").
-  5. Upkeep after the trades are in: FII/DII daily; fundamentals and setup grades once a week (slow).
+  5. Market pulse: oil, FII/DII cash, FII futures & options positions, breadth - added to the summary and
+     saved in the daily journal (desk_journal).
+  6. Upkeep after the trades are in: fundamentals and setup grades once a week (slow).
 Paper trading only: it never connects to Kotak or places a real order.
 
     python daily_bot.py            normal run
@@ -110,20 +112,53 @@ def saved_screen(universe):
         return None
 
 
+def book_totals(client, prices: dict) -> dict:
+    """{book: {"open": rupees, "booked": rupees, "positions": n}} for the journal."""
+    from core import snapshot
+    trades = client.select("paper_trades", {"order": "id.asc"})
+    res = {r["trade_id"]: r for r in snapshot.evaluate_paper(trades, prices)}
+    out: dict = {}
+    for t in trades:
+        r, b = res.get(t["id"], {}), out.setdefault(t.get("book") or "claude", {"open": 0.0, "booked": 0.0, "positions": 0})
+        if r.get("status") == "open":
+            b["open"] += r.get("net_pnl") or 0
+            b["positions"] += 1
+        elif r.get("status") in ("target", "stop", "trail stop", "expired", "exit signal"):
+            b["booked"] += r.get("net_pnl") or 0
+    return {k: {kk: round(vv, 0) for kk, vv in v.items()} for k, v in out.items()}
+
+
+def market_pulse(client, prices: dict, session: date, dry_run: bool = False) -> list[str]:
+    """Oil, FII/DII cash, FII futures & options positions, breadth: update the tables, save the day in the
+    journal (the desk's "experience") and return the WhatsApp lines. Every part is optional."""
+    from core import market, pulse
+    if not dry_run:
+        try:
+            market.merge_fii_dii(market.fetch_fii_dii_today())
+        except Exception as e:                    # NSE often blocks scripts; the figures can be uploaded in the app
+            log.warning("FII/DII cash figures not updated: %s", e)
+        try:
+            n = pulse.update_participant(client, session, log=lambda m: log.warning("  %s", m))
+            log.info("FII positions (participant-wise OI): %d day(s) added", n)
+        except Exception as e:
+            log.warning("FII positions not updated: %s", e)
+    macro = None
+    try:
+        macro = pulse.fetch_macro()
+    except Exception as e:
+        log.warning("Oil / Nifty / VIX not available: %s", e)
+    p = pulse.load(client, macro)
+    if not dry_run:
+        pulse.save_journal(client, pulse.journal_row(p, session, macro, book_totals(client, prices)))
+    return pulse.text(p)
+
+
 def housekeeping(client, prices: dict, universe, step, max_age_days: float = 7) -> list[str]:
     """What 'Refresh live data' used to do by hand, so the app's other pages do not go stale:
-    FII/DII every day, fundamentals + setup grades once a week. Runs after the trades are placed.
+    fundamentals + setup grades once a week. Runs after the trades are placed.
     Returns the names of the parts that were refreshed."""
     from core import backtest, data, market, snapshot
     did = []
-
-    def fii():
-        try:
-            market.merge_fii_dii(market.fetch_fii_dii_today())
-            did.append("FII/DII")
-        except Exception as e:                    # NSE publishes these in the evening and often blocks scripts
-            log.warning("FII/DII not updated (not a problem - upload on the FII/DII page if needed): %s", e)
-    step("FII/DII", fii)
 
     def fundamentals():
         old, saved = data.load_cache("fund_live")
@@ -244,6 +279,10 @@ def main(argv=None) -> int:
 
     # 4. summary
     text = step("Summary", lambda: summary_text(c, px, placed, condor, session)) or "Summary could not be built."
+    lines = step("Market pulse", lambda: market_pulse(c, px, session, a.dry_run))
+    if lines:
+        head, _, foot = text.rpartition("\n\n")
+        text = "\n\n".join([head, "\n".join(lines), foot]) if head else text + "\n\n" + "\n".join(lines)
     print("\n" + text + "\n")
     if not a.dry_run:
         step("Save summary", lambda: c.insert("bot_runs", [{

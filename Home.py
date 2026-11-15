@@ -65,6 +65,7 @@ if admin:
         page("pages/3_Trading_Ideas.py", "Trading & F&O ideas", "⚡"),
         page("pages/4_Backtest.py", "Backtest", "🧪"),
         page("pages/15_Paper_Trading.py", "Paper trading", "🎮"),
+        page("pages/16_Market_Pulse.py", "Market pulse", "🫀"),
         page("pages/14_Client_Profiles.py", "Client profiles", "👥"),
         page("pages/11_Client_Access.py", "Client QR code", "📱"),
     ]

@@ -10,7 +10,7 @@ demo = state.sidebar()
 state.require_admin()
 state.hero("Market command centre", "Value ideas, swing &amp; F&amp;O setups, breadth, flows and macro, with an auditable track record.")
 
-state.quick_links([("pages/4_Backtest.py", "🧪  Backtest"), ("pages/15_Paper_Trading.py", "🎮  Paper trading"),
+state.quick_links([("pages/4_Backtest.py", "🧪  Backtest"), ("pages/15_Paper_Trading.py", "🎮  Paper trading"), ("pages/16_Market_Pulse.py", "🫀  Market pulse"),
                    ("pages/3_Trading_Ideas.py", "⚡  Trading & F&O"), ("pages/1_Fundamental_Ideas.py", "📈  Value ideas"),
                    ("pages/9_Q2_Results.py", "🧾  Q2 FY27 results")])
 
