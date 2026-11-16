@@ -145,3 +145,24 @@ def test_ticker_puts_indices_first_then_paper_stocks_once():
         def select(self, table, params=None):
             return [{"symbol": "GLAND"}, {"symbol": "LAURUSLABS"}, {"symbol": "GLAND"}]
     assert live.ticker_symbols(C()) == ["NIFTY 50", "NIFTY BANK", "GLAND", "LAURUSLABS"]
+
+
+class HealthDB:
+    def __init__(self, run_at=None, ok=True, push=None):
+        self.t = {"bot_runs": [{"run_at": run_at, "ok": ok}] if run_at else [], "relay_status": [{"id": 1, "last_push": push}]}
+
+    def select(self, table, params=None):
+        return self.t[table]
+
+
+def test_health_says_plainly_when_the_office_pc_did_nothing():
+    from datetime import datetime
+    ist = live.IST
+    mon = lambda h, m: datetime(2026, 11, 16, h, m, tzinfo=ist)                     # noqa: E731
+    h = live.health(HealthDB(push="2026-11-15T12:11:00+00:00"), mon(10, 0))
+    assert [t for t, _ in h] == ["bad", "bad"] and "NOT run today" in h[0][1] and "start_relay.bat" in h[1][1]
+    h = live.health(HealthDB(run_at="2026-11-16T03:40:00+00:00", push="2026-11-16T04:29:00+00:00"), mon(10, 0))
+    assert [t for t, _ in h] == ["ok", "ok"] and "09:10" in h[0][1] and "09:59" in h[1][1]
+    assert live.health(HealthDB(run_at="2026-11-16T03:40:00+00:00", ok=False), mon(8, 0))[0][0] == "bad"
+    assert [t for t, _ in live.health(HealthDB(), mon(9, 20))] == ["wait", "bad"]     # bot still working, relay late
+    assert [t for t, _ in live.health(HealthDB(), datetime(2026, 11, 15, 11, 0, tzinfo=ist))] == ["wait", "wait"]   # Sunday

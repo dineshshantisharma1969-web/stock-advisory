@@ -15,6 +15,10 @@ state.quick_links([("pages/4_Backtest.py", "🧪  Backtest"), ("pages/15_Paper_T
                    ("pages/9_Q2_Results.py", "🧾  Q2 FY27 results")])
 
 if not demo:
+    from core import cloud as _cloud_h, live as _live_h
+    if _cloud_h.client():
+        st.markdown("#### 🖥️ Office PC today")
+        _live_h.show_health(st, _cloud_h.client())
     st.markdown("#### 🤖 Daily step for Claude's paper book")
     if st.button("▶  Prepare data for Claude (backtest + snapshot)", type="primary", width="stretch"):
         run = getattr(state, "prepare_for_claude", None)

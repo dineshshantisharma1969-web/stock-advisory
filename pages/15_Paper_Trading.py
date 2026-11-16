@@ -22,6 +22,8 @@ BOOKS = {"claude": ("Main book (A-grade setups only)", 5, 0.02),
 book = st.radio("Book", list(BOOKS), format_func=lambda b: BOOKS[b][0], horizontal=True)
 label, max_day, max_risk = BOOKS[book]
 
+from core import live as _health
+_health.show_health(st, c)
 _runs = c.select("bot_runs", {"order": "id.desc", "limit": "1"})
 if _runs:
     _r = _runs[0]
@@ -32,8 +34,6 @@ if _runs:
         st.code(_r.get("summary") or "", language=None)
         if not _r.get("ok"):
             st.warning(_r.get("log") or "The bot reported a problem.")
-else:
-    st.caption("🤖 The daily bot has not run yet (office PC, weekdays 9:05 am).")
 
 if book == income.BOOK:
     st.caption("Rules: one hedged condor a week, one lot · sold strikes 0.75 expected moves from Nifty · closed if "

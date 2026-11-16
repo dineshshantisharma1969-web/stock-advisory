@@ -130,3 +130,49 @@ def ticker_symbols(client, extra: tuple = ("NIFTY 50", "NIFTY BANK")) -> list[st
             seen.add(s)
             out.append(s)
     return out
+
+
+def health(client, now: datetime | None = None) -> list[tuple[str, str]]:
+    """Is the office PC doing its job today? [(tone, plain line)] for the bot and the relay.
+    tone: ok / wait / bad. Judged against the clock: 9:05 bot, 9:14-15:32 relay, weekdays only."""
+    now = (now or datetime.now(timezone.utc)).astimezone(IST)
+    hm, weekday, today = (now.hour, now.minute), now.weekday() < 5, now.date()
+    out = []
+    runs = client.select("bot_runs", {"order": "id.desc", "limit": "1"})
+    ran = _ts(runs[0]["run_at"]).tz_convert(IST) if runs else None
+    if ran is not None and ran.date() == today:
+        ok = runs[0].get("ok")
+        out.append(("ok" if ok else "bad", f"Paper-trading bot ran today at {ran:%H:%M}"
+                    + ("." if ok else " but reported a problem - see the bot summary on the Paper trading page.")))
+    elif not weekday or hm < (9, 5):
+        out.append(("wait", "Paper-trading bot: next run at 9:05 am on the next weekday"
+                    + (f" (last ran {ran:%a %d %b %H:%M})." if ran is not None else " (it has never run yet).")))
+    elif hm < (9, 45):
+        out.append(("wait", "Paper-trading bot: started at 9:05, no result yet (it can take up to 30 minutes)."))
+    else:
+        out.append(("bad", "Paper-trading bot has NOT run today. On the office PC, double-click run_daily_bot.bat in "
+                           "C:\\nifty-desk (the PC must be on and logged in at 9:05)."))
+    push = _ts(status(client).get("last_push"))
+    push = push.tz_convert(IST) if push is not None else None
+    age = (now - push).total_seconds() / 60 if push is not None else None
+    market_open = weekday and (9, 16) <= hm <= (15, 30)
+    if market_open and (age is None or age > 5):
+        last = f"last price update {push:%a %d %b %H:%M}" if push is not None else "no update ever received"
+        out.append(("bad", f"Kotak live prices are NOT coming in ({last}). On the office PC, double-click "
+                           "start_relay.bat in C:\\kotak-relay. Until then P&L uses the last closing prices."))
+    elif market_open:
+        out.append(("ok", f"Kotak live prices are flowing (last update {push:%H:%M})."))
+    else:
+        out.append(("wait", "Market closed - live prices resume at 9:15 am on the next weekday"
+                    + (f" (last update {push:%a %d %b %H:%M})." if push is not None else ".")))
+    return out
+
+
+def show_health(st, client) -> None:
+    """Draw the status lines on a page (never raises)."""
+    try:
+        for tone, line in health(client):
+            {"ok": st.success, "bad": st.error, "wait": st.info}[tone](
+                {"ok": "🟢 ", "bad": "🔴 ", "wait": "⚪ "}[tone] + line)
+    except Exception as e:
+        st.caption(f"Office-PC status not available: {e}")
