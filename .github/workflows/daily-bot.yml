@@ -1,0 +1,66 @@
+# Daily paper-trading bot for the Nifty 500 desk (code lives on the nifty500-desk branch).
+# Paper trading only: it never places a real order. Needs two repository secrets:
+#   SUPABASE_URL  and  SUPABASE_KEY  (the app database's secret key).
+name: Daily paper-trading bot
+
+on:
+  schedule:
+    - cron: "45 2 * * 1-5"    # 8:15 am IST, Monday-Friday
+    - cron: "20 3 * * 1-5"    # 8:50 am IST back-up (does nothing if the first run succeeded)
+  workflow_dispatch:
+    inputs:
+      probe:
+        description: "Only test that the data sources can be reached (no trading)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: daily-bot
+  cancel-in-progress: false
+
+jobs:
+  bot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    env:
+      TZ: Asia/Kolkata
+      BOT_QUIET: "1"          # this log is public: keep trades and P&L out of it
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: nifty500-desk
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: bot_requirements.txt
+      - run: pip install -q -r bot_requirements.txt
+
+      - name: Can the data sources be reached?
+        run: |
+          check() { code=$(curl -s -o /dev/null -m 40 -A "Mozilla/5.0" -w "%{http_code}" "$2" || true); echo "$1: HTTP $code"; }
+          d=$(date -d "last friday" +%Y%m%d); e=$(date -d "last friday" +%d%m%Y)
+          check "NSE cash bhavcopy" "https://nsearchives.nseindia.com/content/cm/BhavCopy_NSE_CM_0_0_0_${d}_F_0000.csv.zip"
+          check "NSE F&O bhavcopy " "https://nsearchives.nseindia.com/content/fo/BhavCopy_NSE_FO_0_0_0_${d}_F_0000.csv.zip"
+          check "NSE participant OI" "https://nsearchives.nseindia.com/content/nsccl/fao_participant_oi_${e}.csv"
+          check "NSE website       " "https://www.nseindia.com"
+          python - <<'PY'
+          import yfinance as yf
+          h = yf.Ticker("^NSEI").history(period="5d")
+          print("Yahoo Finance: OK," if len(h) else "Yahoo Finance: NO DATA,", len(h), "days")
+          PY
+
+      - name: Run the bot
+        if: ${{ !inputs.probe }}
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        run: |
+          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_KEY" ]; then
+            echo "::error::Add the repository secrets SUPABASE_URL and SUPABASE_KEY (Settings -> Secrets and variables -> Actions)."
+            exit 1
+          fi
+          python daily_bot.py --once
