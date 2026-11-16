@@ -268,7 +268,11 @@ def main(argv=None) -> int:
 
     # 2. snapshot + scoring, with the grades and fundamentals already saved (the slow weekly jobs run in
     #    step 5, AFTER the trades are placed, so they can never push an order past the 9:15 open)
-    summ, _ = data.load_cache("backtest_live")
+    try:
+        summ, _ = data.load_cache("backtest_live")
+    except Exception as e:                        # grades only matter for publishing; never block the trades
+        log.warning("Saved backtest grades could not be read (%s)", type(e).__name__)
+        summ = None
     if not a.dry_run:
         def snap():
             done = snapshot.publish(c, px, u, saved_screen(u), summ, log=lambda m: log.warning("  %s", m))
