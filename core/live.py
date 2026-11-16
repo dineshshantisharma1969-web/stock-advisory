@@ -134,7 +134,7 @@ def ticker_symbols(client, extra: tuple = ("NIFTY 50", "NIFTY BANK")) -> list[st
 
 def health(client, now: datetime | None = None) -> list[tuple[str, str]]:
     """Is the office PC doing its job today? [(tone, plain line)] for the bot and the relay.
-    tone: ok / wait / bad. Judged against the clock: 9:05 bot, 9:14-15:32 relay, weekdays only."""
+    tone: ok / wait / bad. Judged against the clock: bot by 9:10 (cloud), relay 9:14-15:32 (office PC), weekdays."""
     now = (now or datetime.now(timezone.utc)).astimezone(IST)
     hm, weekday, today = (now.hour, now.minute), now.weekday() < 5, now.date()
     out = []
@@ -144,14 +144,14 @@ def health(client, now: datetime | None = None) -> list[tuple[str, str]]:
         ok = runs[0].get("ok")
         out.append(("ok" if ok else "bad", f"Paper-trading bot ran today at {ran:%H:%M}"
                     + ("." if ok else " but reported a problem - see the bot summary on the Paper trading page.")))
-    elif not weekday or hm < (9, 5):
-        out.append(("wait", "Paper-trading bot: next run at 9:05 am on the next weekday"
+    elif not weekday or hm < (8, 15):
+        out.append(("wait", "Paper-trading bot (cloud): next run at about 8:15 am on the next weekday"
                     + (f" (last ran {ran:%a %d %b %H:%M})." if ran is not None else " (it has never run yet).")))
-    elif hm < (9, 45):
-        out.append(("wait", "Paper-trading bot: started at 9:05, no result yet (it can take up to 30 minutes)."))
+    elif hm < (9, 12):
+        out.append(("wait", "Paper-trading bot (cloud): due between 8:15 and 9:10 am, no result yet."))
     else:
-        out.append(("bad", "Paper-trading bot has NOT run today. On the office PC, double-click run_daily_bot.bat in "
-                           "C:\\nifty-desk (the PC must be on and logged in at 9:05)."))
+        out.append(("bad", "Paper-trading bot has NOT run today. To run it now: GitHub -> stock-advisory -> Actions -> "
+                           "'Daily paper-trading bot' -> Run workflow. Trades placed after 9:15 are dated tomorrow."))
     push = _ts(status(client).get("last_push"))
     push = push.tz_convert(IST) if push is not None else None
     age = (now - push).total_seconds() / 60 if push is not None else None

@@ -1,6 +1,6 @@
 """Daily paper-trading bot: does everything "Refresh live data" + "Prepare data for Claude" did, by itself.
 
-Run every weekday at 9:05 am IST (before the 9:15 open) on the office PC:
+Run every weekday before the 9:15 open (GitHub Actions at about 8:15 am IST; or by hand on a PC):
   1. Prices: adds yesterday's official NSE bhavcopy to the 5-year history (Yahoo full refresh once a week).
   2. Snapshot tables + scoring of every paper trade (fills, stops, P&L) from real prices.
   3. The three rule-based paper books place today's trades (filled at today's 9:15 open):
@@ -55,6 +55,15 @@ def last_session(now: datetime) -> date:
     while d.weekday() >= 5:
         d -= timedelta(days=1)
     return d
+
+
+def already_done(client, now: datetime) -> bool:
+    """True if a run earlier today (IST) finished without problems."""
+    rows = client.select("bot_runs", {"order": "id.desc", "limit": "1"})
+    if not rows or not rows[0].get("ok"):
+        return False
+    ran = datetime.fromisoformat(str(rows[0]["run_at"]).replace("Z", "+00:00"))
+    return ran.astimezone(IST).date() == now.astimezone(IST).date()
 
 
 def money(x: float) -> str:
@@ -200,11 +209,14 @@ def housekeeping(client, prices: dict, universe, step, max_age_days: float = 7) 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--once", action="store_true", help="do nothing if today's run already succeeded (for a back-up schedule)")
     a = ap.parse_args(argv)
+    quiet = bool(os.environ.get("BOT_QUIET"))     # cloud runs: the run log is public, so keep trades and P&L out of it
     (HERE / "data").mkdir(exist_ok=True)
+    out = logging.StreamHandler(sys.stdout)
+    out.setLevel(logging.WARNING if quiet else logging.INFO)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s  %(message)s", datefmt="%d-%b %H:%M:%S",
-                        handlers=[logging.StreamHandler(sys.stdout),
-                                  logging.FileHandler(HERE / "data" / "bot_log.txt", encoding="utf-8")])
+                        handlers=[out, logging.FileHandler(HERE / "data" / "bot_log.txt", encoding="utf-8")])
     load_settings()
     sys.path.insert(0, str(HERE))
     from core import backtest, cloud, data, forward, income, snapshot
@@ -216,13 +228,16 @@ def main(argv=None) -> int:
     now = datetime.now(IST)
     session = last_session(now)
     problems, notes = [], []
+    if a.once and already_done(c, now):
+        print("Today's run already succeeded - nothing to do.")
+        return 0
 
     def step(name, fn):
         try:
             return fn()
         except Exception as e:
             problems.append(f"{name}: {e}")
-            log.error("%s failed: %s", name, e)
+            log.error("%s failed: %s", name, type(e).__name__ if quiet else e)
             try:
                 c.insert("app_errors", [{"step": f"Bot: {name}", "error": f"{type(e).__name__}: {e}"[:2000],
                                          "traceback": traceback.format_exc()[-6000:], "versions": "daily_bot"}])
@@ -283,7 +298,8 @@ def main(argv=None) -> int:
     if lines:
         head, _, foot = text.rpartition("\n\n")
         text = "\n\n".join([head, "\n".join(lines), foot]) if head else text + "\n\n" + "\n".join(lines)
-    print("\n" + text + "\n")
+    if not quiet:
+        print("\n" + text + "\n")
     if not a.dry_run:
         step("Save summary", lambda: c.insert("bot_runs", [{
             "session": session.isoformat(), "ok": not problems, "summary": text,
@@ -293,7 +309,7 @@ def main(argv=None) -> int:
     if not a.dry_run:
         housekeeping(c, px, u, step)
     if problems:
-        log.error("Finished with problems: %s", "; ".join(problems))
+        log.error("Finished with problems in: %s", ", ".join(p.split(":")[0] for p in problems) if quiet else "; ".join(problems))
         return 1
     log.info("All done.")
     return 0

@@ -160,9 +160,10 @@ def test_health_says_plainly_when_the_office_pc_did_nothing():
     ist = live.IST
     mon = lambda h, m: datetime(2026, 11, 16, h, m, tzinfo=ist)                     # noqa: E731
     h = live.health(HealthDB(push="2026-11-15T12:11:00+00:00"), mon(10, 0))
-    assert [t for t, _ in h] == ["bad", "bad"] and "NOT run today" in h[0][1] and "start_relay.bat" in h[1][1]
+    assert [t for t, _ in h] == ["bad", "bad"] and "NOT run today" in h[0][1] and "start_relay.bat" in h[1][1] and "Run workflow" in h[0][1]
     h = live.health(HealthDB(run_at="2026-11-16T03:40:00+00:00", push="2026-11-16T04:29:00+00:00"), mon(10, 0))
     assert [t for t, _ in h] == ["ok", "ok"] and "09:10" in h[0][1] and "09:59" in h[1][1]
     assert live.health(HealthDB(run_at="2026-11-16T03:40:00+00:00", ok=False), mon(8, 0))[0][0] == "bad"
-    assert [t for t, _ in live.health(HealthDB(), mon(9, 20))] == ["wait", "bad"]     # bot still working, relay late
+    assert [t for t, _ in live.health(HealthDB(), mon(9, 5))] == ["wait", "wait"]     # bot still due, market not open
+    assert [t for t, _ in live.health(HealthDB(), mon(9, 20))] == ["bad", "bad"]
     assert [t for t, _ in live.health(HealthDB(), datetime(2026, 11, 15, 11, 0, tzinfo=ist))] == ["wait", "wait"]   # Sunday

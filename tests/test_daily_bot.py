@@ -88,3 +88,20 @@ def test_bot_runs_end_to_end_with_fakes(monkeypatch, tmp_path):
     run = db.tables["bot_runs"][0]
     assert run["ok"] is True and "New today: A (at 9:15 open)" in run["summary"]
     assert "Oil: Brent $95.8" in run["summary"] and run["summary"].rstrip().endswith("not a recommendation._")
+
+
+def test_once_skips_a_second_run_on_the_same_day(monkeypatch):
+    ist = bot.IST
+    now = datetime(2026, 11, 17, 8, 50, tzinfo=ist)
+
+    class DB:
+        def __init__(self, rows):
+            self.rows = rows
+
+        def select(self, table, params=None):
+            return self.rows
+
+    assert bot.already_done(DB([{"run_at": "2026-11-17T02:50:00+00:00", "ok": True}]), now)       # 8:20 today
+    assert not bot.already_done(DB([{"run_at": "2026-11-17T02:50:00+00:00", "ok": False}]), now)  # failed: run again
+    assert not bot.already_done(DB([{"run_at": "2026-11-16T02:50:00+00:00", "ok": True}]), now)   # yesterday
+    assert not bot.already_done(DB([]), now)
