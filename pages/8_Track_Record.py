@@ -11,7 +11,7 @@ demo = state.sidebar()
 state.hero("Track record &amp; P&amp;L", "Every published call, tracked automatically and tamper-evident.")
 
 px = state.load_prices(demo)
-tab_i, tab_j = st.tabs(["Published ideas (auto-tracked)", "My trades journal (F&O / swing)"])
+tab_i, tab_j, tab_e = st.tabs(["Published ideas (auto-tracked)", "My trades journal (F&O / swing)", "End of day"])
 
 with tab_i:
     ok, msg = ledger.verify_chain()
@@ -107,3 +107,10 @@ with tab_i:
                 eq = cl.sort_values("exit_date").assign(cum=lambda d: d["pnl"].cumsum())
                 st.plotly_chart(px_.line(eq, x="exit_date", y="cum", title="Realised equity curve (₹)"), width="stretch")
             st.dataframe(t, hide_index=True, width="stretch")
+
+    with tab_e:
+        from core import eod
+        try:
+            eod.show(eod.load_summary(px, admin=state.is_admin(), demo=demo))
+        except Exception as e:
+            state.report_error("End-of-day summary", e)

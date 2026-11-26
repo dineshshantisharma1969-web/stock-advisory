@@ -10,7 +10,8 @@ demo = state.sidebar()
 state.require_admin()
 state.hero("Market command centre", "Value ideas, swing &amp; F&amp;O setups, breadth, flows and macro, with an auditable track record.")
 
-state.quick_links([("pages/4_Backtest.py", "🧪  Backtest"), ("pages/15_Paper_Trading.py", "🎮  Paper trading"), ("pages/16_Market_Pulse.py", "🫀  Market pulse"),
+state.quick_links([("pages/17_EOD_Summary.py", "🌇  End of day"), ("pages/4_Backtest.py", "🧪  Backtest"),
+                   ("pages/15_Paper_Trading.py", "🎮  Paper trading"), ("pages/16_Market_Pulse.py", "🫀  Market pulse"),
                    ("pages/3_Trading_Ideas.py", "⚡  Trading & F&O"), ("pages/1_Fundamental_Ideas.py", "📈  Value ideas"),
                    ("pages/9_Q2_Results.py", "🧾  Q2 FY27 results")])
 
@@ -129,6 +130,7 @@ fig.update_layout(height=340, margin=dict(l=10, r=10, t=10, b=10), legend=dict(o
 st.plotly_chart(fig, width="stretch")
 
 st.subheader("Track record snapshot")
+st.page_link("pages/17_EOD_Summary.py", label="End-of-day P&L and carried-forward calls", icon="🌇")
 ib = ledger.ideas()
 if len(ib):
     ev = ledger.evaluate_ideas(ib, px)

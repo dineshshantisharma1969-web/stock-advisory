@@ -65,16 +65,20 @@ if admin:
         page("pages/3_Trading_Ideas.py", "Trading & F&O ideas", "⚡"),
         page("pages/4_Backtest.py", "Backtest", "🧪"),
         page("pages/15_Paper_Trading.py", "Paper trading", "🎮"),
+        page("pages/17_EOD_Summary.py", "End of day", "🌇"),
         page("pages/16_Market_Pulse.py", "Market pulse", "🫀"),
         page("pages/14_Client_Profiles.py", "Client profiles", "👥"),
         page("pages/11_Client_Access.py", "Client QR code", "📱"),
     ]
-menu["For clients"] = [
+client_pages = [
     page("pages/00_Client_Home.py", "Welcome", "🏠", default=not admin),
     page("pages/12_My_Calls.py", "My calls", "🎯"),
     page("pages/13_Risk_Profile.py", "Risk profile", "🧭"),
     page("pages/8_Track_Record.py", "Track record", "📒"),
 ]
+if not admin:  # admins already have End of day on the research desk; one URL only
+    client_pages.append(page("pages/17_EOD_Summary.py", "End of day", "🌇"))
+menu["For clients"] = client_pages
 menu["Markets"] = [
     page("pages/5_Market_Breadth.py", "Market breadth", "🌊"),
     page("pages/6_FII_DII.py", "FII / DII flows", "💰"),

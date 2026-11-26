@@ -90,6 +90,48 @@ def test_bot_runs_end_to_end_with_fakes(monkeypatch, tmp_path):
     assert "Oil: Brent $95.8" in run["summary"] and run["summary"].rstrip().endswith("not a recommendation._")
 
 
+def test_eod_mode_summarises_without_placing_trades(monkeypatch, tmp_path):
+    from core import cloud, config, data, forward, snapshot
+    monkeypatch.setenv("SUPABASE_URL", "https://x.supabase.co")
+    monkeypatch.setenv("SUPABASE_KEY", "k")
+    monkeypatch.setattr(bot, "HERE", tmp_path)
+    monkeypatch.setattr(config, "CACHE_DIR", tmp_path / "cache")
+    db = FakeDB()
+    monkeypatch.setattr(cloud, "client", lambda: db)
+    idx = pd.bdate_range("2026-11-16", periods=4)
+    px = {"ABC": pd.DataFrame({"Open": 100.0, "High": 101.0, "Low": 99.0, "Close": 100.0, "Volume": 1}, index=idx)}
+    monkeypatch.setattr(data, "load_cache", lambda name, max_age_hours=None: (px, None))
+
+    def forbidden(*a, **k):
+        raise AssertionError("end-of-day mode must not place trades or refresh prices")
+
+    monkeypatch.setattr(forward, "run", forbidden)
+    monkeypatch.setattr(forward, "run_dip", forbidden)
+    monkeypatch.setattr(snapshot, "publish", forbidden)
+    monkeypatch.setattr(data, "refresh_prices", forbidden)
+    assert bot.main(["--eod"]) == 0
+    run = db.tables["bot_runs"][0]
+    assert run["ok"] is True and run["log"] == "eod"
+    assert "No calls closed today." in run["summary"]
+    assert "No open calls carried forward." in run["summary"]
+    assert "End of day" in run["summary"]
+    assert db.tables["paper_trades"] == []
+
+
+def test_eod_dry_run_does_not_save(monkeypatch, tmp_path):
+    from core import cloud, data
+    monkeypatch.setenv("SUPABASE_URL", "https://x.supabase.co")
+    monkeypatch.setenv("SUPABASE_KEY", "k")
+    monkeypatch.setattr(bot, "HERE", tmp_path)
+    db = FakeDB()
+    monkeypatch.setattr(cloud, "client", lambda: db)
+    idx = pd.bdate_range("2026-11-16", periods=2)
+    px = {"ABC": pd.DataFrame({"Open": 1.0, "High": 1.0, "Low": 1.0, "Close": 1.0, "Volume": 1}, index=idx)}
+    monkeypatch.setattr(data, "load_cache", lambda name, max_age_hours=None: (px, None))
+    assert bot.main(["--eod", "--dry-run"]) == 0
+    assert db.tables["bot_runs"] == []
+
+
 def test_once_skips_a_second_run_on_the_same_day(monkeypatch):
     ist = bot.IST
     now = datetime(2026, 11, 17, 8, 50, tzinfo=ist)
