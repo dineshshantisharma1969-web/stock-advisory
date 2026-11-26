@@ -19,3 +19,11 @@ WhatsApp-ready P&L summary in the app (Paper trading -> "Bot summary"). It never
 
 If the PC was off at 9:05, run `run_daily_bot.bat` by hand before 9:15. Running it twice is safe.
 Problems are shown in the window, saved in `data\bot_log.txt` and in the app - tell Claude "check the bot".
+
+## End-of-day summary (3:45 pm)
+
+`python daily_bot.py --eod` (or double-click `run_eod_bot.bat`) prints today's P&L and the calls still open for the next session. It does not place trades and does not change the 9:05 am run.
+
+Schedule a second task: Weekly, Mon-Fri, 3:45 pm, program `C:\nifty-desk\run_eod_bot.bat`, Start in `C:\nifty-desk`. The same text is saved in the app under Paper trading -> "Bot summary". In the app it is also on **End of day** in the sidebar, on Desk home, and on the Track record page.
+
+Today's P&L is what was booked on calls closed today, plus the move since the previous close on calls still open. Carried-forward MTM is the open result measured from the entry price. The forward-test book in that summary is `fwd-momentum`, together with the published idea book and any open manual journal trades.

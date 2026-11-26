@@ -14,6 +14,7 @@ Paper trading only: it never connects to Kotak or places a real order.
 
     python daily_bot.py            normal run
     python daily_bot.py --dry-run  everything except writing trades / tables (prints what it would do)
+    python daily_bot.py --eod      end-of-day P&L and carried-forward calls only (no new trades)
 
 Settings: bot_settings.ini next to this file (copy bot_settings_TEMPLATE.ini). Keep it private.
 """
@@ -85,6 +86,29 @@ def book_lines(name: str, trades: list[dict], results: list[dict], placed: list[
     if not opn and not placed:
         out.append("No open positions.")
     return out
+
+
+def run_eod(client, dry_run: bool, quiet: bool) -> int:
+    """End-of-day P&L and carried-forward calls. Does not place or close trades.
+
+    Uses the prices already saved by the morning run, plus today's live marks from the
+    office PC when the relay has pushed them. Safe to schedule at 15:45 IST.
+    """
+    from core import data, eod
+    px, _ = data.load_cache("prices_live")
+    if not px:
+        log.error("No saved prices for the end-of-day summary. Run the morning bot or refresh first.")
+        return 1
+    summary = eod.load_summary(px, admin=True, client=client)
+    text = eod.format_eod(summary)
+    if not quiet:
+        print("\n" + text + "\n")
+    if not dry_run:
+        client.insert("bot_runs", [{
+            "session": summary.session.isoformat() if summary.session else None,
+            "ok": True, "summary": text, "log": "eod",
+        }])
+    return 0
 
 
 def summary_text(client, prices: dict, placed: dict, condor: dict, session: date) -> str:
@@ -210,6 +234,8 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--once", action="store_true", help="do nothing if today's run already succeeded (for a back-up schedule)")
+    ap.add_argument("--eod", action="store_true",
+                    help="print the end-of-day P&L and carried-forward calls, without placing trades")
     a = ap.parse_args(argv)
     quiet = bool(os.environ.get("BOT_QUIET"))     # cloud runs: the run log is public, so keep trades and P&L out of it
     (HERE / "data").mkdir(exist_ok=True)
@@ -228,6 +254,8 @@ def main(argv=None) -> int:
     now = datetime.now(IST)
     session = last_session(now)
     problems, notes = [], []
+    if a.eod:
+        return run_eod(c, a.dry_run, quiet)
     if a.once and already_done(c, now):
         print("Today's run already succeeded - nothing to do.")
         return 0

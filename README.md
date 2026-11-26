@@ -16,6 +16,7 @@ sidebar (Yahoo Finance, needs internet) or switch on **Demo data** to explore of
 | FII / DII | NSE daily provisional cash flows, stored to build history |
 | Macro | VIX, USD/INR, crude, gold, US yields, global indices; World Bank India data |
 | Track Record | Append-only, hash-chained idea book auto-tracked to P&L; manual F&O/swing journal |
+| End of day | Today's realised P&L, today's open mark-to-market, and calls carried into the next session |
 | Q2 Results | Quarterly revenue/profit YoY & QoQ, margin change and grade for each company (Q2 FY27 by default) |
 | Personal Finance | SIP/step-up, goal planner, retirement corpus, EMI & prepayment, new vs old tax regime, allocation |
 | Client Access | QR code for the deployed app link, plus a pre-sharing checklist |
@@ -35,7 +36,7 @@ non-zero code if a step fails.
 
 ## Tests
 
-`python -m pytest` runs 111 tests that check the maths against independent values: Gordon-growth DCF,
+`python -m pytest` runs the test suite (168 tests) that checks the maths against independent values: Gordon-growth DCF,
 reverse-DCF round trip, put-call parity, a known bank EMI, hand-computed income tax, no-look-ahead
 backtest fills, tamper detection in the idea book, and the Supabase backend against a simulated API.
 

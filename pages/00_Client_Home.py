@@ -7,8 +7,8 @@ demo = state.sidebar()
 state.hero("Research you can verify", "Calls matched to your risk profile, every one tracked openly - hits and misses.")
 
 state.quick_links([("pages/13_Risk_Profile.py", "🧭  Find my risk profile"), ("pages/12_My_Calls.py", "🎯  My calls"),
-                   ("pages/8_Track_Record.py", "📒  Track record"), ("pages/9_Q2_Results.py", "🧾  Q2 results"),
-                   ("pages/10_Personal_Finance.py", "💼  Personal finance")])
+                   ("pages/8_Track_Record.py", "📒  Track record"), ("pages/17_EOD_Summary.py", "🌇  End of day"),
+                   ("pages/9_Q2_Results.py", "🧾  Q2 results"), ("pages/10_Personal_Finance.py", "💼  Personal finance")])
 
 prof = st.session_state.get("risk_profile")
 if prof:
